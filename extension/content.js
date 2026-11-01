@@ -2,6 +2,10 @@
 console.log('[Facebook Insights Collector] Content script v2.0 đã tải và sẵn sàng.');
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'PING') {
+    sendResponse({ success: true, message: 'PONG' });
+    return true;
+  }
   if (request.action === 'SCAN_CURRENT_STORY') {
     try {
       const data = extractStoryData();

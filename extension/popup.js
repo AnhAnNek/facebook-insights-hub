@@ -57,10 +57,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     triggerScan('SCROLL_AND_SCAN', true);
   });
 
+  // Hàm tự động kiểm tra và nạp content.js nếu tab Facebook chưa có
+  async function ensureContentScriptInjected(tabId) {
+    return new Promise((resolve) => {
+      chrome.tabs.sendMessage(tabId, { action: 'PING' }, async (response) => {
+        if (chrome.runtime.lastError || !response?.success) {
+          console.log('[Popup] Content script chưa nạp, tự động inject content.js...');
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tabId },
+              files: ['content.js']
+            });
+            setTimeout(() => resolve(true), 250);
+          } catch (err) {
+            console.error('[Popup] Lỗi tự động nạp script:', err);
+            resolve(false);
+          }
+        } else {
+          resolve(true);
+        }
+      });
+    });
+  }
+
   async function triggerScan(actionType, showAlerts = true) {
     const isScrollAction = actionType === 'SCROLL_AND_SCAN';
     const activeBtn = isScrollAction ? btnScrollScan : btnScan;
-    const originalText = activeBtn.innerHTML;
 
     activeBtn.innerHTML = isScrollAction ? '⏳ Đang cuộn danh sách...' : '⏳ Đang quét...';
     btnScan.disabled = true;
@@ -71,6 +93,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!activeTab || !activeTab.id) {
         if (showAlerts) alert('Không tìm thấy tab Facebook đang mở!');
         resetButtons();
+        return;
+      }
+
+      // Tự động kiểm tra và bơm content.js vào tab nếu chưa có mã
+      const isReady = await ensureContentScriptInjected(activeTab.id);
+      if (!isReady) {
+        resetButtons();
+        if (showAlerts) {
+          alert('Không thể kết nối đến trang Facebook. Hãy thử F5 lại tab Facebook và bấm Quét lại nhé!');
+        }
         return;
       }
 
