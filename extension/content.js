@@ -1,5 +1,51 @@
 // Content script chạy trên Facebook Stories & Kho Lưu Trữ Tin (>24h)
-console.log('[Facebook Insights Collector] Content script v2.1 (Lazy-load Auto Scroller) đã sẵn sàng.');
+console.log('[Facebook Insights Collector] Content script v2.2 (Chính xác 100% thứ tự & Lọc tên chuẩn) đã sẵn sàng.');
+
+// Danh sách các từ khóa giao diện hệ thống của Facebook cần loại trừ tuyệt đối
+const BLACKLISTED_TERMS = new Set([
+  'online status indicator',
+  'đang hoạt động',
+  'trạng thái hoạt động',
+  'refresh',
+  'tải lại',
+  'làm mới',
+  'close',
+  'đóng',
+  'options',
+  'tùy chọn',
+  'more',
+  'xem thêm',
+  'send message',
+  'gửi tin nhắn',
+  'reply',
+  'trả lời',
+  'mute',
+  'tắt tiếng',
+  'play',
+  'phát',
+  'pause',
+  'tạm dừng',
+  'delete',
+  'xóa',
+  'story',
+  'tin',
+  'viewers',
+  'người xem',
+  'like',
+  'love',
+  'thích',
+  'tym',
+  'tim',
+  'yêu thích',
+  'active',
+  'active now',
+  'comment',
+  'bình luận',
+  'chia sẻ',
+  'share'
+]);
+
+const ACTIVITY_PATTERN = /(Active\s*(now|\d+[mhwd]\s*ago)|Hoạt động\s*(\d+\s*phút|\d+\s*giờ|\d+\s*ngày|xong|ngay)|Đang hoạt động|vừa mới)/i;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'PING') {
@@ -9,27 +55,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'SCAN_CURRENT_STORY' || request.action === 'SCROLL_AND_SCAN') {
     const isDeepScan = request.action === 'SCROLL_AND_SCAN';
-    const maxSteps = isDeepScan ? 80 : 30; // Quét sâu lên tới 80 lần cuộn nếu danh sách dài
+    const maxSteps = isDeepScan ? 80 : 35;
 
-    autoScrollAndCollectAllViewers(maxSteps, 380)
+    autoScrollAndCollectInOrder(maxSteps, 380)
       .then(data => sendResponse({ success: true, data }))
       .catch(err => {
         console.error('[Facebook Insights Collector] Lỗi cuộn & quét:', err);
         sendResponse({ success: false, error: err.message });
       });
-    return true; // async sendResponse
+    return true;
   }
   return true;
 });
 
 // Tìm phần tử thanh cuộn của danh sách người xem (Viewer Drawer trong Facebook)
 function getViewerScrollContainer() {
-  const activityPattern = /(Active\s*(now|\d+[mhwd]\s*ago)|Hoạt động\s*(\d+\s*phút|\d+\s*giờ|\d+\s*ngày|xong|ngay)|Đang hoạt động|vừa mới)/i;
-
   // Chiến lược 1: Đi ngược lên từ các phần tử có chữ "Active ... ago"
   const allSpans = document.querySelectorAll('span, div');
   for (const el of allSpans) {
-    if (el.children.length === 0 && activityPattern.test(el.innerText || '')) {
+    if (el.children.length === 0 && ACTIVITY_PATTERN.test(el.innerText || '')) {
       let parent = el.parentElement;
       while (parent && parent !== document.body) {
         const style = window.getComputedStyle(parent);
@@ -73,143 +117,168 @@ function getViewerScrollContainer() {
   return null;
 }
 
-// Thu hoạch danh sách người xem đang hiển thị trong DOM và đưa vào Map
-function harvestCurrentViewers(masterMap, authorName) {
-  const activityPattern = /(Active\s*(now|\d+[mhwd]\s*ago)|Hoạt động\s*(\d+\s*phút|\d+\s*giờ|\d+\s*ngày|xong|ngay)|Đang hoạt động|vừa mới)/i;
-  let newCount = 0;
+// Bóc tách thông tin một hàng người xem cụ thể
+function parseSingleViewerRow(row, authorName) {
+  // Bỏ qua các khối kích thước bất thường (VD: icon đóng, thanh kéo tiêu đề)
+  const rect = row.getBoundingClientRect();
+  if (rect.height < 25 || rect.height > 120) return null;
 
-  // 1. Quét theo pattern hoạt động (Active 29m ago, Active now...)
-  const textElements = document.querySelectorAll('span, div');
-  for (const el of textElements) {
-    if (el.children.length === 0 && activityPattern.test(el.innerText || '')) {
-      const activityText = el.innerText.trim();
+  // Lấy danh sách văn bản trong hàng
+  const allTexts = Array.from(row.querySelectorAll('span[dir="auto"], span, strong, div'))
+    .map(el => el.innerText?.trim())
+    .filter(t => {
+      if (!t || t.length < 1 || t.length > 50 || t.includes('\n') || t === '...' || t === '·') return false;
+      const lower = t.toLowerCase();
+      if (BLACKLISTED_TERMS.has(lower)) return false;
+      return true;
+    });
 
-      const row = el.closest('div[role="button"]') || 
-                  el.closest('div[role="listitem"]') || 
-                  el.closest('div[data-visualcompletion="ignore-dynamic-layout"]') ||
-                  el.parentElement?.parentElement;
-      if (!row) continue;
+  // Tìm nhãn thời gian hoạt động (Active 29m ago, Active now...)
+  let activityText = '';
+  const activityNode = allTexts.find(t => ACTIVITY_PATTERN.test(t));
+  if (activityNode) {
+    activityText = activityNode;
+  }
 
-      // Tìm tên người xem trong hàng
-      const candidateTexts = Array.from(row.querySelectorAll('span[dir="auto"], span, strong, div'))
-        .map(n => n.innerText?.trim())
-        .filter(t => t && t.length > 1 && t.length < 50 && !activityPattern.test(t) && t !== '...' && t !== '·' && !t.includes('\n'));
+  // Tên người xem: Loại bỏ đoạn text hoạt động và tên chủ Story
+  const candidateNames = allTexts.filter(t => !ACTIVITY_PATTERN.test(t));
+  if (candidateNames.length === 0) return null;
 
-      const userName = candidateTexts[0];
-      if (!userName || userName === authorName || masterMap.has(userName)) continue;
+  const userName = candidateNames[0];
+  if (!userName || userName.length < 2 || userName === authorName) return null;
+  if (BLACKLISTED_TERMS.has(userName.toLowerCase())) return null;
 
-      // Link Facebook cá nhân
-      let profileUrl = '';
-      const linkEl = row.querySelector('a[href*="facebook.com/"], a[href^="/"]');
-      if (linkEl) {
-        let href = linkEl.getAttribute('href') || '';
-        if (href.startsWith('/')) href = 'https://www.facebook.com' + href;
-        if (!href.includes('/stories/')) profileUrl = href.split('?')[0];
-      }
-      if (!profileUrl) {
-        profileUrl = `https://www.facebook.com/search/top?q=${encodeURIComponent(userName)}`;
-      }
+  // Trích xuất Avatar
+  let avatarUrl = '';
+  const img = row.querySelector('img, image');
+  if (img) {
+    const src = img.getAttribute('src') || img.getAttribute('xlink:href');
+    if (src && (src.includes('fbcdn') || src.startsWith('http'))) {
+      avatarUrl = src;
+    }
+  }
+  if (!avatarUrl) {
+    avatarUrl = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(userName)}`;
+  }
 
-      // Avatar
-      let avatarUrl = '';
-      const img = row.querySelector('img, image');
-      if (img) {
-        const src = img.getAttribute('src') || img.getAttribute('xlink:href');
-        if (src && (src.includes('fbcdn') || src.startsWith('http'))) avatarUrl = src;
-      }
-      if (!avatarUrl) {
-        avatarUrl = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(userName)}`;
-      }
+  // Trích xuất link trang cá nhân Facebook (Profile URL)
+  let profileUrl = '';
 
-      // Cảm xúc (Reaction)
-      let interactionType = 'view';
-      const rowHtml = row.innerHTML.toLowerCase();
-      if (rowHtml.includes('heart') || rowHtml.includes('tym') || rowHtml.includes('tim') || rowHtml.includes('love') || rowHtml.includes('yêu thích')) {
-        interactionType = 'love';
-      } else if (rowHtml.includes('like') || rowHtml.includes('thích')) {
-        interactionType = 'like';
-      } else if (rowHtml.includes('haha') || rowHtml.includes('cười')) {
-        interactionType = 'haha';
-      }
-
-      masterMap.set(userName, {
-        user_name: userName,
-        user_profile_url: profileUrl,
-        interaction_type: interactionType,
-        comment_text: activityText,
-        avatar_url: avatarUrl
-      });
-      newCount++;
+  // 1. Tìm thẻ <a> trong hàng hoặc chính thẻ hàng
+  const linkEl = row.tagName.toLowerCase() === 'a' ? row : row.querySelector('a');
+  if (linkEl) {
+    let href = linkEl.getAttribute('href') || linkEl.href || '';
+    if (href && !href.includes('/stories/') && !href.includes('#') && !href.startsWith('javascript:')) {
+      if (href.startsWith('/')) href = 'https://www.facebook.com' + href;
+      profileUrl = href.split('?')[0];
     }
   }
 
-  // 2. Quét bổ sung những người xem tắt trạng thái hoạt động (không có dòng Active)
-  const container = getViewerScrollContainer();
-  if (container) {
-    const rows = container.querySelectorAll('div[role="button"], div[role="listitem"]');
-    for (const row of rows) {
-      const candidateTexts = Array.from(row.querySelectorAll('span[dir="auto"], span, strong'))
-        .map(t => t.innerText?.trim())
-        .filter(t => t && t.length > 1 && t.length < 50 && t !== '...' && !t.includes('\n') && !activityPattern.test(t));
-
-      if (candidateTexts.length > 0) {
-        const userName = candidateTexts[0];
-        if (masterMap.has(userName) || userName === 'Đóng' || userName === 'Close' || userName === authorName) continue;
-
-        let avatarUrl = '';
-        const img = row.querySelector('img, image');
-        if (img) {
-          const src = img.getAttribute('src') || img.getAttribute('xlink:href');
-          if (src && (src.includes('fbcdn') || src.startsWith('http'))) avatarUrl = src;
-        }
-        if (!avatarUrl) avatarUrl = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(userName)}`;
-
-        let profileUrl = '';
-        const link = row.querySelector('a[href*="facebook.com/"], a[href^="/"]');
-        if (link) {
-          let href = link.getAttribute('href') || '';
-          if (href.startsWith('/')) href = 'https://www.facebook.com' + href;
-          if (!href.includes('/stories/')) profileUrl = href.split('?')[0];
-        }
-        if (!profileUrl) profileUrl = `https://www.facebook.com/search/top?q=${encodeURIComponent(userName)}`;
-
-        masterMap.set(userName, {
-          user_name: userName,
-          user_profile_url: profileUrl,
-          interaction_type: 'view',
-          comment_text: 'Đã xem Story',
-          avatar_url: avatarUrl
-        });
-        newCount++;
+  // 2. Tìm ID trong data-hovercard (ví dụ: /ajax/hovercard/user.php?id=1000...)
+  if (!profileUrl) {
+    const hovercardEl = row.getAttribute('data-hovercard') ? row : row.querySelector('[data-hovercard]');
+    if (hovercardEl) {
+      const hc = hovercardEl.getAttribute('data-hovercard') || '';
+      const matchId = hc.match(/id=(\d+)/);
+      if (matchId) {
+        profileUrl = `https://www.facebook.com/profile.php?id=${matchId[1]}`;
       }
+    }
+  }
+
+  // 3. Dự phòng link tìm kiếm theo đúng tên
+  if (!profileUrl) {
+    profileUrl = `https://www.facebook.com/search/top?q=${encodeURIComponent(userName)}`;
+  }
+
+  // Cảm xúc (Reaction)
+  let interactionType = 'view';
+  const rowHtml = row.innerHTML.toLowerCase();
+  if (rowHtml.includes('heart') || rowHtml.includes('tym') || rowHtml.includes('tim') || rowHtml.includes('love') || rowHtml.includes('yêu thích')) {
+    interactionType = 'love';
+  } else if (rowHtml.includes('like') || rowHtml.includes('thích')) {
+    interactionType = 'like';
+  } else if (rowHtml.includes('haha') || rowHtml.includes('cười')) {
+    interactionType = 'haha';
+  }
+
+  return {
+    user_name: userName,
+    user_profile_url: profileUrl,
+    interaction_type: interactionType,
+    comment_text: activityText || 'Đã xem Story',
+    avatar_url: avatarUrl,
+    y: rect.top // Tọa độ thẳng đứng trên màn hình để sắp xếp đúng thứ tự
+  };
+}
+
+// Thu hoạch các hàng đang hiển thị và đưa vào mảng bảo toàn thứ tự từ trên xuống dưới
+function harvestVisibleRowsInOrder(container, authorName, seenNames, orderedList) {
+  let rawCandidates = [];
+  if (container) {
+    const found = container.querySelectorAll('div[role="button"], div[role="listitem"], a[role="link"], div[data-visualcompletion]');
+    rawCandidates = Array.from(found);
+  } else {
+    rawCandidates = Array.from(document.querySelectorAll('div[role="button"], div[role="listitem"]'));
+  }
+
+  // Parse từng hàng và lưu tọa độ y
+  const currentBatch = [];
+  for (const row of rawCandidates) {
+    const viewer = parseSingleViewerRow(row, authorName);
+    if (viewer && !seenNames.has(viewer.user_name)) {
+      currentBatch.push(viewer);
+    }
+  }
+
+  // SẮP XẾP CHÍNH XÁC THEO TỌA ĐỘ TRỰC QUAN TRÊN MÀN HÌNH (TỪ TRÊN XUỐNG DƯỚI)
+  currentBatch.sort((a, b) => a.y - b.y);
+
+  let newCount = 0;
+  for (const v of currentBatch) {
+    if (!seenNames.has(v.user_name)) {
+      seenNames.add(v.user_name);
+      // Xóa thuộc tính y tạm thời trước khi lưu
+      const { y, ...cleanViewer } = v;
+      orderedList.push(cleanViewer);
+      newCount++;
     }
   }
 
   return newCount;
 }
 
-// Tự động cuộn theo từng nấc để kích hoạt Lazy Loading của Facebook
-async function autoScrollAndCollectAllViewers(maxSteps = 60, delayMs = 380) {
+// Tự động cuộn và gom toàn bộ người xem BẢO TOÀN 100% THỨ TỰ TỪ TRÊN XUỐNG DƯỚI
+async function autoScrollAndCollectInOrder(maxSteps = 60, delayMs = 380) {
   const meta = extractStoryMeta();
-  const masterMap = new Map();
-
-  // Thu hoạch lượt đầu tiên trước khi cuộn
-  harvestCurrentViewers(masterMap, meta.authorName);
-  notifyProgress(masterMap.size);
+  const seenNames = new Set();
+  const orderedList = []; // Mảng bảo đảm thứ tự tuần tự xuất hiện trên giao diện
 
   const container = getViewerScrollContainer();
-  if (!container) {
-    console.log('[Collector] Danh sách ngắn hoặc không có thanh cuộn riêng, lấy các phần tử hiện tại:', masterMap.size);
-    return formatResult(meta, Array.from(masterMap.values()));
+
+  // BƯỚC 1: Đưa thanh cuộn về vị trí đỉnh đầu tiên (scrollTop = 0) để quét đúng từ người đầu tiên
+  if (container && container.scrollTop > 0) {
+    container.scrollTop = 0;
+    container.dispatchEvent(new Event('scroll', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 250));
   }
 
-  console.log(`[Collector] Bắt đầu tự động cuộn lazy loading (Tổng chiều cao: ${container.scrollHeight}px)...`);
+  // Thu hoạch đợt người xem đầu tiên ở trên đỉnh
+  harvestVisibleRowsInOrder(container, meta.authorName, seenNames, orderedList);
+  notifyProgress(orderedList.length);
+
+  if (!container) {
+    console.log('[Collector] Không tìm thấy thanh cuộn, lấy các phần tử hiện có:', orderedList.length);
+    return formatResult(meta, orderedList);
+  }
+
+  console.log(`[Collector] Bắt đầu tự động cuộn tuần tự từ trên xuống dưới...`);
 
   let consecutiveNoNewItems = 0;
   let lastScrollTop = -1;
 
   for (let step = 0; step < maxSteps; step++) {
-    // Cuộn xuống 75% chiều cao khung nhìn để Facebook kích hoạt tải trang tiếp theo (virtual DOM)
+    // Cuộn xuống 75% chiều cao khung nhìn để Facebook nạp thêm hàng mới
     const nextScroll = container.scrollTop + container.clientHeight * 0.75;
     container.scrollTop = nextScroll;
     container.dispatchEvent(new Event('scroll', { bubbles: true }));
@@ -217,9 +286,9 @@ async function autoScrollAndCollectAllViewers(maxSteps = 60, delayMs = 380) {
     // Chờ Facebook fetch dữ liệu GraphQL & render các phần tử mới
     await new Promise(r => setTimeout(r, delayMs));
 
-    // Thu hoạch các phần tử vừa xuất hiện
-    const newlyFound = harvestCurrentViewers(masterMap, meta.authorName);
-    notifyProgress(masterMap.size);
+    // Thu hoạch các phần tử vừa xuất hiện (được thêm tuần tự vào đuôi mảng)
+    const newlyFound = harvestVisibleRowsInOrder(container, meta.authorName, seenNames, orderedList);
+    notifyProgress(orderedList.length);
 
     const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 15;
     const scrollStuck = container.scrollTop === lastScrollTop;
@@ -227,18 +296,17 @@ async function autoScrollAndCollectAllViewers(maxSteps = 60, delayMs = 380) {
 
     if (newlyFound === 0) {
       consecutiveNoNewItems++;
-      // Thử nhảy thẳng tới đáy nếu danh sách bị khựng
       container.scrollTop = container.scrollHeight;
       await new Promise(r => setTimeout(r, delayMs));
-      harvestCurrentViewers(masterMap, meta.authorName);
-      notifyProgress(masterMap.size);
+      harvestVisibleRowsInOrder(container, meta.authorName, seenNames, orderedList);
+      notifyProgress(orderedList.length);
     } else {
       consecutiveNoNewItems = 0;
     }
 
-    // Đã chạm đáy và 2 lần liên tiếp không còn người mới -> Đã tải hết 100%
+    // Đã chạm đáy và 2 lần liên tiếp không còn ai mới -> Đã tải hết 100%
     if (atBottom && consecutiveNoNewItems >= 2) {
-      console.log(`[Collector] Đã chạm đáy sau ${step + 1} bước cuộn! Tổng số người xem: ${masterMap.size}`);
+      console.log(`[Collector] Đã chạm đáy danh sách! Tổng cộng: ${orderedList.length} người xem.`);
       break;
     }
 
@@ -247,15 +315,13 @@ async function autoScrollAndCollectAllViewers(maxSteps = 60, delayMs = 380) {
     }
   }
 
-  return formatResult(meta, Array.from(masterMap.values()));
+  return formatResult(meta, orderedList);
 }
 
 function notifyProgress(count) {
   try {
     chrome.runtime.sendMessage({ action: 'SCAN_PROGRESS', count });
-  } catch (_e) {
-    // Popup có thể đóng hoặc không lắng nghe
-  }
+  } catch (_e) {}
 }
 
 // Trích xuất Story ID và Clean URL (đặc biệt cho Story xem lại >24h trong Kho lưu trữ)
@@ -284,7 +350,6 @@ function extractStoryIdAndUrl() {
       const encodedId = storiesMatch[2];
       cleanStoryUrl = `https://www.facebook.com/stories/${bucketId}/${encodedId}/`;
 
-      // Thử giải mã Base64 (VD: UzpfSVNDOjIwNjc5NzMzOTcxNjY0MTU= -> S:ISC:2067973397166415)
       try {
         const decoded = atob(encodedId.replace(/-/g, '+').replace(/_/g, '/'));
         const idMatch = decoded.match(/\d{10,}/);
