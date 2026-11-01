@@ -519,18 +519,25 @@ export default function HomePage() {
                           {story.title}
                         </h3>
 
-                      {/* URL Box */}
-                      <div className="flex items-center justify-between gap-2 p-3 bg-black/40 border border-white/5 rounded-xl font-mono text-xs text-sky-400 mb-4">
-                        <span className="truncate">{story.story_url}</span>
-                        <a 
-                          href={story.story_url} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="text-sky-400 hover:text-sky-300 flex-shrink-0"
-                          title="Mở story gốc trên Facebook"
-                        >
-                          <ExternalLink size={13} />
-                        </a>
+                      {/* Story ID & URL Box */}
+                      <div className="p-3 bg-black/40 border border-white/5 rounded-xl text-xs mb-4 space-y-1.5 font-mono">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-slate-400 font-sans text-[11px]">Mã Story ID:</span>
+                          <span className="text-sky-400 font-bold font-mono text-[11px] bg-sky-950/40 px-2 py-0.5 rounded border border-sky-500/20">{story.id}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-slate-400 font-sans text-[11px]">URL:</span>
+                          <span className="truncate text-slate-400 text-[11px] max-w-[240px]">{story.story_url}</span>
+                          <a 
+                            href={story.story_url} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="text-sky-400 hover:text-sky-300 flex-shrink-0"
+                            title="Mở story gốc trên Facebook"
+                          >
+                            <ExternalLink size={12} />
+                          </a>
+                        </div>
                       </div>
 
                       {/* Reactions Pill Bar */}
@@ -831,6 +838,10 @@ export default function HomePage() {
               {/* Story Summary Card */}
               <div className="p-4 rounded-xl bg-black/40 border border-white/5 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[11px] text-slate-400">Story ID:</span>
+                    <span className="font-mono text-xs text-sky-400 font-bold bg-sky-950/60 px-2 py-0.5 rounded border border-sky-500/20">{selectedStory.id}</span>
+                  </div>
                   <div className="text-[11px] text-slate-400">Đường dẫn Story gốc:</div>
                   <a 
                     href={selectedStory.story_url} 

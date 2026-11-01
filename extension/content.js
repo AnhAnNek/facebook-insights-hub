@@ -258,11 +258,109 @@ function notifyProgress(count) {
   }
 }
 
-// Trích xuất metadata của Story (Tác giả, quyền riêng tư, thời gian)
+// Trích xuất Story ID và Clean URL (đặc biệt cho Story xem lại >24h trong Kho lưu trữ)
+function extractStoryIdAndUrl() {
+  const currentUrl = window.location.href;
+  let storyId = '';
+  let cleanStoryUrl = currentUrl.split('&source=')[0].split('?source=')[0];
+
+  // 1. Kiểm tra query parameters trong URL (story_fbid, fbid, story_id, id)
+  try {
+    const urlObj = new URL(currentUrl);
+    const paramId = urlObj.searchParams.get('story_fbid') || 
+                    urlObj.searchParams.get('fbid') || 
+                    urlObj.searchParams.get('story_id') || 
+                    urlObj.searchParams.get('id');
+    if (paramId && /^\d+$/.test(paramId)) {
+      storyId = paramId;
+    }
+  } catch (_e) {}
+
+  // 2. Kiểm tra đường dẫn URL dạng /stories/{bucket_id}/{encoded_id}/
+  if (!storyId) {
+    const storiesMatch = currentUrl.match(/\/stories\/(\d+)\/([A-Za-z0-9_-]+=*)/);
+    if (storiesMatch) {
+      const bucketId = storiesMatch[1];
+      const encodedId = storiesMatch[2];
+      cleanStoryUrl = `https://www.facebook.com/stories/${bucketId}/${encodedId}/`;
+
+      // Thử giải mã Base64 (VD: UzpfSVNDOjIwNjc5NzMzOTcxNjY0MTU= -> S:ISC:2067973397166415)
+      try {
+        const decoded = atob(encodedId.replace(/-/g, '+').replace(/_/g, '/'));
+        const idMatch = decoded.match(/\d{10,}/);
+        if (idMatch) {
+          storyId = idMatch[0];
+        } else {
+          storyId = encodedId;
+        }
+      } catch (_e) {
+        storyId = encodedId;
+      }
+    }
+  }
+
+  // 3. Kiểm tra đường dẫn URL dạng /archive/stories/{id}/
+  if (!storyId) {
+    const archiveMatch = currentUrl.match(/\/archive\/stories\/(\d+)/);
+    if (archiveMatch) {
+      storyId = archiveMatch[1];
+      cleanStoryUrl = `https://www.facebook.com/archive/stories/${storyId}/`;
+    }
+  }
+
+  // 4. Tìm kiếm trong DOM nếu URL là trang chung /archive/stories/
+  if (!storyId || storyId.length < 5) {
+    const activeElements = document.querySelectorAll('div[aria-current="true"] a, div[aria-selected="true"] a, div[role="dialog"] a[href*="stories"], a[href*="story_fbid"]');
+    for (const link of activeElements) {
+      const href = link.getAttribute('href') || '';
+      const match = href.match(/(?:story_fbid=|fbid=|\/stories\/\d+\/|stories\/)(\d+|[A-Za-z0-9_-]+=*)/);
+      if (match) {
+        storyId = match[1];
+        if (href.startsWith('http')) cleanStoryUrl = href.split('?')[0];
+        else if (href.startsWith('/')) cleanStoryUrl = ('https://www.facebook.com' + href).split('?')[0];
+        break;
+      }
+    }
+  }
+
+  // 5. Tìm trong các thẻ meta canonical hoặc OpenGraph
+  if (!storyId) {
+    const canonical = document.querySelector('link[rel="canonical"]')?.getAttribute('href') ||
+                      document.querySelector('meta[property="og:url"]')?.getAttribute('content');
+    if (canonical && canonical.includes('facebook.com')) {
+      cleanStoryUrl = canonical;
+      const match = canonical.match(/\d{10,}/);
+      if (match) storyId = match[0];
+    }
+  }
+
+  // 6. Nếu vẫn chưa có ID số cụ thể, tạo ID duy nhất dựa trên URL hoặc hash
+  if (!storyId) {
+    const hashMatch = currentUrl.match(/Uzpf[A-Za-z0-9_-]+/);
+    if (hashMatch) {
+      storyId = hashMatch[0];
+    } else {
+      let hash = 0;
+      for (let i = 0; i < currentUrl.length; i++) {
+        hash = ((hash << 5) - hash) + currentUrl.charCodeAt(i);
+        hash |= 0;
+      }
+      storyId = 'archive_' + Math.abs(hash);
+    }
+  }
+
+  return {
+    storyId,
+    storyUrl: cleanStoryUrl
+  };
+}
+
+// Trích xuất metadata của Story (Tác giả, quyền riêng tư, thời gian, ID và URL)
 function extractStoryMeta() {
   const currentUrl = window.location.href;
   const isArchivePage = currentUrl.includes('/archive/stories/');
   const isStoryPage = currentUrl.includes('/stories/') || isArchivePage;
+  const { storyId, storyUrl } = extractStoryIdAndUrl();
 
   let authorName = 'Trần Văn An';
   let privacy = 'Công khai (Public)';
@@ -299,8 +397,9 @@ function extractStoryMeta() {
   }
 
   return {
+    storyId,
+    storyUrl,
     isStoryPage,
-    storyUrl: currentUrl,
     authorName,
     privacy,
     storyAge,

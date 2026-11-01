@@ -234,6 +234,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const isArchived = currentScannedData.isArchived || currentScannedData.storyUrl?.includes('/archive/');
       const payload = {
         story: {
+          id: currentScannedData.storyId,
           story_url: currentScannedData.storyUrl,
           title: `Story của ${currentScannedData.authorName} (${isArchived ? 'Kho lưu trữ >24h' : 'Tin mới <24h'})`,
           author_name: currentScannedData.authorName,
@@ -291,6 +292,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     document.getElementById('viewers-count').innerText = `${data.viewers.length} người xem`;
+
+    // Hiển thị Story ID & Clean URL
+    const idTag = document.getElementById('story-id-tag');
+    if (idTag) idTag.innerText = data.storyId || 'Chưa nhận diện ID';
+
+    const urlLink = document.getElementById('story-url-link');
+    if (urlLink) {
+      urlLink.href = data.storyUrl || '#';
+      urlLink.innerText = data.storyUrl || 'Đang mở';
+      urlLink.title = data.storyUrl || '';
+    }
 
     const viewersListEl = document.getElementById('viewers-list');
     viewersListEl.innerHTML = '';

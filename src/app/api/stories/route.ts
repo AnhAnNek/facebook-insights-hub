@@ -47,6 +47,7 @@ export async function POST(request: Request) {
 
     const storyId = insertStoryWithInteractions(
       {
+        id: story.id || story.story_id,
         story_url: story.story_url,
         title: story.title || `Story Facebook (${new Date().toLocaleDateString('vi-VN')})`,
         author_name: story.author_name || 'Trần Văn An',

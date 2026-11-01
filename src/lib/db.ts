@@ -327,6 +327,7 @@ export function getStats() {
 
 export function insertStoryWithInteractions(
   storyData: {
+    id?: string;
     story_url: string;
     title: string;
     author_name: string;
@@ -347,13 +348,24 @@ export function insertStoryWithInteractions(
   }>
 ) {
   const db = getDatabase();
-  const storyId = 'story_' + Date.now();
+  const storyId = storyData.id 
+    ? (storyData.id.startsWith('fb_') || storyData.id.startsWith('story_') ? storyData.id : 'fb_' + storyData.id) 
+    : ('story_' + Date.now());
 
   const insertStoryStmt = db.prepare(`
     INSERT INTO stories (
       id, story_url, title, author_name, author_id, page_url, media_type, media_url,
       status, privacy, total_views, total_reactions, total_replies, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      story_url = excluded.story_url,
+      title = excluded.title,
+      status = excluded.status,
+      privacy = excluded.privacy,
+      total_views = excluded.total_views,
+      total_reactions = excluded.total_reactions,
+      total_replies = excluded.total_replies,
+      updated_at = excluded.updated_at
   `);
 
   insertStoryStmt.run(
@@ -373,6 +385,9 @@ export function insertStoryWithInteractions(
     new Date().toISOString(),
     new Date().toISOString()
   );
+
+  // Làm sạch danh sách tương tác cũ trước khi nạp bộ mới nhất của Story này
+  db.prepare('DELETE FROM interactions WHERE story_id = ?').run(storyId);
 
   const insertInteractionStmt = db.prepare(`
     INSERT INTO interactions (
