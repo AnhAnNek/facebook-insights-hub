@@ -77,6 +77,7 @@ export default function HomePage() {
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
   const [detailLoading, setDetailLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [storyFilter, setStoryFilter] = useState<'all' | 'active' | 'archived'>('all');
   const [toast, setToast] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string>('Vừa mới kết nối');
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
@@ -166,11 +167,17 @@ export default function HomePage() {
   };
 
   // Filter stories
-  const filteredStories = stories.filter(s => 
-    s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.author_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.story_url.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredStories = stories.filter(s => {
+    const matchesSearch = 
+      s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.author_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.story_url.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const isArchived = s.status === 'archived' || s.story_url.includes('archive');
+    if (storyFilter === 'active') return matchesSearch && !isArchived;
+    if (storyFilter === 'archived') return matchesSearch && isArchived;
+    return matchesSearch;
+  });
 
   return (
     <div className="min-h-screen bg-[#0a0d14] text-slate-100">
@@ -377,17 +384,57 @@ export default function HomePage() {
         {/* TAB 1: STORIES & VIEWERS RECEIVED FROM EXTENSION */}
         {activeTab === 'stories' && (
           <section className="mb-12">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <span>Dữ Liệu Story Nhận Từ Chrome Extension</span>
-                </h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  Mỗi khi bạn bấm "Lưu Vào Server SQLite" trên tiện ích Chrome, dữ liệu sẽ ngay lập tức xuất hiện ở đây.
-                </p>
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <span>Dữ Liệu Story Nhận Từ Chrome Extension</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Mỗi khi bạn bấm "Lưu Vào Server SQLite" trên tiện ích Chrome, dữ liệu sẽ ngay lập tức xuất hiện ở đây.
+              </p>
+            </div>
+
+            {/* Filter Tabs & Search */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setStoryFilter('all')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                    storyFilter === 'all'
+                      ? 'bg-blue-600/20 border-blue-500/40 text-blue-400'
+                      : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Tất Cả ({stories.length})
+                </button>
+                <button
+                  onClick={() => setStoryFilter('active')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                    storyFilter === 'active'
+                      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                      : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>⚡ Tin Đang Chạy (&lt;24h)</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20">
+                    {stories.filter(s => s.status !== 'archived' && !s.story_url.includes('archive')).length}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setStoryFilter('archived')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                    storyFilter === 'archived'
+                      ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
+                      : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>📂 Kho Lưu Trữ (&gt;24h)</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20">
+                    {stories.filter(s => s.status === 'archived' || s.story_url.includes('archive')).length}
+                  </span>
+                </button>
               </div>
 
-              <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="flex items-center gap-3">
                 <div className="relative flex-1 sm:w-72">
                   <Search size={15} className="absolute left-3.5 top-3.5 text-slate-500" />
                   <input 
@@ -395,7 +442,7 @@ export default function HomePage() {
                     placeholder="Tìm theo tác giả, URL, tiêu đề..." 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-slate-900/80 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-sky-400 transition-all"
+                    className="w-full bg-slate-900/80 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-sky-400 transition-all"
                   />
                 </div>
 
@@ -419,9 +466,9 @@ export default function HomePage() {
                 <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto mb-4">
                   <Puzzle size={24} />
                 </div>
-                <h3 className="text-base font-bold text-white mb-1">Chưa có Story nào được gửi về</h3>
+                <h3 className="text-base font-bold text-white mb-1">Chưa có Story nào trong mục này</h3>
                 <p className="text-slate-400 text-xs sm:text-sm max-w-md mx-auto mb-5">
-                  Hãy mở Facebook trên Chrome, xem Story của bạn, mở danh sách người xem và bấm nút <strong>Quét Dữ Liệu</strong> trên Extension để đồng bộ về đây!
+                  Hãy mở Facebook trên Chrome, xem Story hoặc mở Kho lưu trữ tin, mở danh sách người xem và bấm nút <strong>Quét</strong> trên Extension!
                 </p>
                 <button 
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all cursor-pointer"
@@ -432,37 +479,45 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {filteredStories.map((story) => (
-                  <div 
-                    key={story.id} 
-                    className="p-6 rounded-2xl bg-slate-900/80 backdrop-blur-xl border border-white/10 hover:border-sky-400/30 hover:shadow-xl hover:shadow-sky-500/5 transition-all flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center gap-3 mb-4">
-                        <img 
-                          src={`https://api.dicebear.com/7.x/identicon/svg?seed=${story.author_name || story.author_id}`}
-                          alt={story.author_name}
-                          className="w-11 h-11 rounded-full object-cover border-2 border-blue-500"
-                        />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="font-bold text-sm text-white">{story.author_name}</h4>
-                            <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 font-semibold">
-                              {story.privacy || 'Công khai (Public)'}
-                            </span>
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                              🔌 Chrome Extension
-                            </span>
-                          </div>
-                          <div className="text-xs text-slate-400 mt-1">
-                            Lưu lúc: {new Date(story.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} &bull; {new Date(story.created_at).toLocaleDateString('vi-VN')}
+                {filteredStories.map((story) => {
+                  const isArchived = story.status === 'archived' || story.story_url.includes('archive');
+                  return (
+                    <div 
+                      key={story.id} 
+                      className="p-6 rounded-2xl bg-slate-900/80 backdrop-blur-xl border border-white/10 hover:border-sky-400/30 hover:shadow-xl hover:shadow-sky-500/5 transition-all flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center gap-3 mb-4">
+                          <img 
+                            src={`https://api.dicebear.com/7.x/identicon/svg?seed=${story.author_name || story.author_id}`}
+                            alt={story.author_name}
+                            className="w-11 h-11 rounded-full object-cover border-2 border-blue-500"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-bold text-sm text-white">{story.author_name}</h4>
+                              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 font-semibold">
+                                {story.privacy || 'Công khai (Public)'}
+                              </span>
+                              {isArchived ? (
+                                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold flex items-center gap-1">
+                                  📂 Kho lưu trữ (&gt;24h)
+                                </span>
+                              ) : (
+                                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold flex items-center gap-1">
+                                  ⚡ Đang chạy (&lt;24h)
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-400 mt-1">
+                              Lưu lúc: {new Date(story.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} &bull; {new Date(story.created_at).toLocaleDateString('vi-VN')}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <h3 className="text-base font-bold text-slate-100 mb-3 line-clamp-2">
-                        {story.title}
-                      </h3>
+                        <h3 className="text-base font-bold text-slate-100 mb-3 line-clamp-2">
+                          {story.title}
+                        </h3>
 
                       {/* URL Box */}
                       <div className="flex items-center justify-between gap-2 p-3 bg-black/40 border border-white/5 rounded-xl font-mono text-xs text-sky-400 mb-4">
@@ -515,8 +570,9 @@ export default function HomePage() {
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
+            </div>
             )}
           </section>
         )}
@@ -551,6 +607,68 @@ export default function HomePage() {
                 <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
                   CORS Enabled &bull; Hỗ trợ Extension Chrome
                 </span>
+              </div>
+            </div>
+
+            {/* Hướng Dẫn Quét Story Ngoài 24h (Kho Lưu Trữ Tin - Archive) */}
+            <div className="p-6 rounded-2xl bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-slate-900/70 border border-amber-500/40 shadow-xl mb-6">
+              <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-lg border border-amber-500/30">
+                    📂
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <span>Cách Quét Story Bên Ngoài 24 Giờ (Kho Lưu Trữ Tin / Story Archive)</span>
+                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                        Trường hợp &gt; 24h
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      Story sau 24h không bị mất! Facebook tự động lưu vào <strong>Kho lưu trữ tin (Archive)</strong> và giữ nguyên danh sách người xem.
+                    </p>
+                  </div>
+                </div>
+
+                <a 
+                  href="https://www.facebook.com/archive/stories/" 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-amber-500 text-slate-950 hover:bg-amber-400 transition-all shadow-lg shadow-amber-500/20 cursor-pointer"
+                >
+                  <ExternalLink size={13} />
+                  <span>Mở Kho Lưu Trữ Tin Facebook</span>
+                </a>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-300">
+                <div className="p-3.5 rounded-xl bg-black/40 border border-white/5">
+                  <div className="font-bold text-white mb-1 flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-[10px]">1</span>
+                    Truy cập Kho lưu trữ
+                  </div>
+                  <p className="text-slate-400 leading-relaxed">
+                    Vào trang cá nhân &rarr; Bấm <strong>"..."</strong> &rarr; Chọn <strong>Kho lưu trữ (Archive)</strong> &rarr; Chọn <strong>Kho lưu trữ tin</strong> (hoặc bấm nút màu vàng phía trên).
+                  </p>
+                </div>
+                <div className="p-3.5 rounded-xl bg-black/40 border border-white/5">
+                  <div className="font-bold text-white mb-1 flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-[10px]">2</span>
+                    Mở Story & Bấm Người xem
+                  </div>
+                  <p className="text-slate-400 leading-relaxed">
+                    Bấm vào bất kỳ Story cũ nào từ trước &rarr; Nhấn nút <strong>"Người xem"</strong> ở góc dưới để mở bảng danh sách người xem y hệt Story hiện tại.
+                  </p>
+                </div>
+                <div className="p-3.5 rounded-xl bg-black/40 border border-white/5">
+                  <div className="font-bold text-white mb-1 flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-[10px]">3</span>
+                    Mở Extension & Quét
+                  </div>
+                  <p className="text-slate-400 leading-relaxed">
+                    Mở Extension &rarr; Bấm <strong>Quét Nhanh</strong> hoặc <strong>Cuộn & Quét Hết</strong> &rarr; Bấm Lưu vào SQLite. Dữ liệu sẽ được lưu vĩnh viễn trên máy của bạn!
+                  </p>
+                </div>
               </div>
             </div>
 

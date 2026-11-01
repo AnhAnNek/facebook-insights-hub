@@ -54,6 +54,7 @@ export async function POST(request: Request) {
         page_url: story.page_url,
         media_url: story.media_url,
         privacy: story.privacy || 'Công khai (Public)',
+        status: story.status || (story.story_url.includes('archive') ? 'archived' : 'active'),
         total_views: story.total_views || (interactions ? interactions.length : 0),
         total_reactions: story.total_reactions || (interactions ? interactions.filter((i: any) => i.interaction_type !== 'view').length : 0)
       },

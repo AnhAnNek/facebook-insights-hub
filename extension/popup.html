@@ -11,7 +11,7 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
     body {
-      width: 380px;
+      width: 400px;
       background: #090d16;
       color: #f1f5f9;
       padding: 16px;
@@ -20,10 +20,15 @@
     .header {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 14px;
+      justify-content: space-between;
+      margin-bottom: 12px;
       padding-bottom: 12px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
     .brand-icon {
       width: 32px;
@@ -51,7 +56,7 @@
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 10px;
       padding: 10px 12px;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
       font-size: 12px;
       display: flex;
       align-items: center;
@@ -65,41 +70,91 @@
       display: inline-block;
       margin-right: 6px;
     }
-    .btn {
-      width: 100%;
-      padding: 10px 14px;
-      border-radius: 10px;
+    .badge {
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
       font-weight: 600;
-      font-size: 13px;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+    }
+    .badge-archive {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .button-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .btn {
+      padding: 9px 12px;
+      border-radius: 9px;
+      font-weight: 600;
+      font-size: 12px;
       cursor: pointer;
       border: none;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 6px;
       transition: all 0.2s ease;
+      text-decoration: none;
     }
     .btn-primary {
       background: linear-gradient(135deg, #2563eb, #3b82f6);
       color: white;
-      box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
     }
-    .btn-primary:hover {
-      opacity: 0.95;
-      transform: translateY(-1px);
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.14);
+      color: white;
+    }
+    .btn-archive {
+      grid-column: span 2;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      color: #fcd34d;
+    }
+    .btn-archive:hover {
+      background: rgba(245, 158, 11, 0.2);
     }
     .btn-success {
+      width: 100%;
       background: linear-gradient(135deg, #059669, #10b981);
       color: white;
       margin-top: 10px;
+      padding: 10px;
+      font-size: 13px;
     }
-    .btn-success:hover {
+    .btn:hover {
       opacity: 0.95;
+      transform: translateY(-1px);
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .tip-box {
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.5;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px dashed rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 12px;
     }
     .result-card {
-      margin-top: 14px;
       background: #0f172a;
-      border: 1px solid rgba(56, 189, 248, 0.2);
+      border: 1px solid rgba(56, 189, 248, 0.25);
       border-radius: 12px;
       padding: 12px;
       display: none;
@@ -112,24 +167,24 @@
       padding-bottom: 8px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
-    .badge {
-      padding: 3px 8px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 600;
-      background: rgba(56, 189, 248, 0.15);
-      color: #38bdf8;
-    }
     .viewers-list {
-      max-height: 180px;
+      max-height: 200px;
       overflow-y: auto;
       margin-bottom: 10px;
+      padding-right: 4px;
+    }
+    .viewers-list::-webkit-scrollbar {
+      width: 4px;
+    }
+    .viewers-list::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
     }
     .viewer-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 6px 0;
+      padding: 7px 0;
       border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     }
     .viewer-info {
@@ -139,10 +194,11 @@
       overflow: hidden;
     }
     .avatar {
-      width: 24px;
-      height: 24px;
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
       object-fit: cover;
+      background: #1e293b;
     }
     .viewer-name {
       font-weight: 600;
@@ -153,6 +209,10 @@
       text-overflow: ellipsis;
       max-width: 140px;
     }
+    .viewer-activity {
+      font-size: 10px;
+      color: #94a3b8;
+    }
     .viewer-reaction {
       font-size: 11px;
       padding: 2px 6px;
@@ -160,21 +220,16 @@
       background: rgba(244, 63, 94, 0.15);
       color: #fb7185;
       font-weight: 600;
+      white-space: nowrap;
     }
     .link-fb {
       color: #38bdf8;
       text-decoration: none;
-      font-size: 11px;
+      font-size: 10px;
+      margin-left: 4px;
     }
-    .tip-box {
-      margin-top: 12px;
-      font-size: 11px;
-      color: #94a3b8;
-      line-height: 1.5;
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px dashed rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      padding: 8px 10px;
+    .link-fb:hover {
+      text-decoration: underline;
     }
     .toast {
       padding: 8px 12px;
@@ -192,40 +247,52 @@
 <body>
 
   <div class="header">
-    <div class="brand-icon">F</div>
-    <div>
-      <div class="brand-title">Story Insights Collector</div>
-      <div class="brand-sub">Quét Story & Lưu vào Next.js SQLite</div>
+    <div class="brand-wrap">
+      <div class="brand-icon">F</div>
+      <div>
+        <div class="brand-title">Story Insights Collector</div>
+        <div class="brand-sub">Quét Người Xem Story Facebook & Lưu SQLite</div>
+      </div>
     </div>
   </div>
 
   <div class="status-box">
     <div>
-      <span class="status-dot"></span>
+      <span class="status-dot" id="status-dot"></span>
       <span id="tab-status">Đang kiểm tra tab Facebook...</span>
     </div>
     <span class="badge" id="host-badge">localhost:3000</span>
   </div>
 
-  <button class="btn btn-primary" id="btn-scan">
-    <span>🔍 Quét Dữ Liệu Story Đang Mở</span>
-  </button>
+  <div class="button-group">
+    <button class="btn btn-primary" id="btn-scan" title="Quét nhanh các người xem đang hiển thị trên màn hình">
+      <span>⚡ Quét Nhanh</span>
+    </button>
+    <button class="btn btn-secondary" id="btn-scroll-scan" title="Tự động cuộn xuống đáy danh sách để lấy toàn bộ người xem">
+      <span>📜 Cuộn & Quét Hết</span>
+    </button>
+    <a href="https://www.facebook.com/archive/stories/" target="_blank" class="btn btn-archive" id="btn-open-archive">
+      <span>📂 Mở Kho Lưu Trữ Tin Cũ (>24h)</span>
+    </a>
+  </div>
 
   <div class="tip-box">
-    💡 <strong>Mẹo:</strong> Hãy mở Story của bạn trên Facebook và nhấn vào mục <strong>"Người xem" (ở góc dưới bên trái Story)</strong> để Facebook mở danh sách người xem trước khi bấm Quét!
+    💡 <strong>Mẹo:</strong> Mở Story của bạn trên Facebook &rarr; Nhấn vào mục <strong>"Người xem" (ở góc dưới bên trái Story)</strong> để danh sách người xem bung lên như trong hình, sau đó bấm <strong>Quét</strong>!
   </div>
 
   <div class="result-card" id="result-card">
     <div class="result-head">
       <div>
         <div style="font-weight: 700; color: white;" id="author-name">Trần Văn An</div>
-        <div style="font-size: 11px; color: #94a3b8;" id="privacy-tag">Công khai (Public)</div>
+        <div style="font-size: 11px; color: #94a3b8;" id="story-meta">
+          <span id="privacy-tag">Công khai</span> &bull; <span id="story-status-tag">Tin mới</span>
+        </div>
       </div>
       <span class="badge" id="viewers-count">0 người xem</span>
     </div>
 
     <div class="viewers-list" id="viewers-list">
-      <!-- Dynamic Viewers -->
+      <!-- Danh sách người xem được render động -->
     </div>
 
     <button class="btn btn-success" id="btn-save">

@@ -334,6 +334,7 @@ export function insertStoryWithInteractions(
     page_url?: string;
     media_url?: string;
     privacy?: string;
+    status?: string;
     total_views?: number;
     total_reactions?: number;
   },
@@ -364,9 +365,9 @@ export function insertStoryWithInteractions(
     storyData.page_url || 'https://www.facebook.com/' + storyData.author_id,
     'image',
     storyData.media_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80',
-    'active',
+    storyData.status || (storyData.story_url.includes('archive') ? 'archived' : 'active'),
     storyData.privacy || 'Công khai (Public)',
-    storyData.total_views || interactions.length * 3 + 15,
+    storyData.total_views || interactions.length,
     storyData.total_reactions || interactions.filter(i => i.interaction_type !== 'view').length,
     interactions.filter(i => !!i.comment_text).length,
     new Date().toISOString(),

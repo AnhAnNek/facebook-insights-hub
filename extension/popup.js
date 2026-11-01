@@ -3,46 +3,84 @@ const SERVER_API = 'http://localhost:3000/api/stories';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const tabStatusEl = document.getElementById('tab-status');
+  const statusDot = document.getElementById('status-dot');
   const btnScan = document.getElementById('btn-scan');
+  const btnScrollScan = document.getElementById('btn-scroll-scan');
   const btnSave = document.getElementById('btn-save');
   const resultCard = document.getElementById('result-card');
   const toastMsg = document.getElementById('toast-msg');
 
   // Kiểm tra tab hiện tại
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab && tab.url && tab.url.includes('facebook.com')) {
-    if (tab.url.includes('/stories/')) {
-      tabStatusEl.innerText = 'Đang mở Facebook Story ✅';
-      tabStatusEl.style.color = '#34d399';
+  let isStoryTab = false;
+  let isArchiveTab = false;
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab && tab.url && tab.url.includes('facebook.com')) {
+      if (tab.url.includes('/archive/stories/')) {
+        isStoryTab = true;
+        isArchiveTab = true;
+        tabStatusEl.innerText = 'Kho Lưu Trữ Tin (>24h) 📂';
+        tabStatusEl.style.color = '#fbbf24';
+        statusDot.style.background = '#f59e0b';
+      } else if (tab.url.includes('/stories/')) {
+        isStoryTab = true;
+        tabStatusEl.innerText = 'Đang mở Story (<24h) 🟢';
+        tabStatusEl.style.color = '#34d399';
+        statusDot.style.background = '#10b981';
+      } else {
+        tabStatusEl.innerText = 'Đang ở Facebook (Hãy mở Story)';
+        tabStatusEl.style.color = '#94a3b8';
+        statusDot.style.background = '#94a3b8';
+      }
     } else {
-      tabStatusEl.innerText = 'Đang ở Facebook (Hãy mở Story)';
-      tabStatusEl.style.color = '#fbbf24';
+      tabStatusEl.innerText = 'Chưa mở trang Facebook';
+      tabStatusEl.style.color = '#f87171';
+      statusDot.style.background = '#ef4444';
     }
-  } else {
-    tabStatusEl.innerText = 'Chưa mở trang Facebook';
-    tabStatusEl.style.color = '#f87171';
+  } catch (e) {
+    console.error(e);
   }
 
-  // Sự kiện bấm quét Story
-  btnScan.addEventListener('click', async () => {
-    btnScan.innerText = '⏳ Đang quét cấu trúc Story...';
+  // Tự động quét nhanh ngay khi mở Extension nếu đang ở trang Story
+  if (isStoryTab) {
+    triggerScan('SCAN_CURRENT_STORY', false);
+  }
+
+  // Nút Quét Nhanh (quét DOM hiện tại)
+  btnScan.addEventListener('click', () => {
+    triggerScan('SCAN_CURRENT_STORY', true);
+  });
+
+  // Nút Cuộn & Quét Hết (tự động cuộn danh sách người xem có thanh cuộn)
+  btnScrollScan.addEventListener('click', () => {
+    triggerScan('SCROLL_AND_SCAN', true);
+  });
+
+  async function triggerScan(actionType, showAlerts = true) {
+    const isScrollAction = actionType === 'SCROLL_AND_SCAN';
+    const activeBtn = isScrollAction ? btnScrollScan : btnScan;
+    const originalText = activeBtn.innerHTML;
+
+    activeBtn.innerHTML = isScrollAction ? '⏳ Đang cuộn danh sách...' : '⏳ Đang quét...';
     btnScan.disabled = true;
+    btnScrollScan.disabled = true;
 
     try {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!activeTab || !activeTab.id) {
-        alert('Không tìm thấy tab Facebook đang mở!');
-        btnScan.innerText = '🔍 Quét Dữ Liệu Story Đang Mở';
-        btnScan.disabled = false;
+        if (showAlerts) alert('Không tìm thấy tab Facebook đang mở!');
+        resetButtons();
         return;
       }
 
-      chrome.tabs.sendMessage(activeTab.id, { action: 'SCAN_CURRENT_STORY' }, (response) => {
-        btnScan.innerText = '🔍 Quét Dữ Liệu Story Đang Mở';
-        btnScan.disabled = false;
+      chrome.tabs.sendMessage(activeTab.id, { action: actionType }, (response) => {
+        resetButtons();
 
         if (chrome.runtime.lastError) {
-          alert('Không thể kết nối đến trang Facebook. Hãy thử F5 lại tab Facebook và bấm Quét lại nhé!');
+          if (showAlerts) {
+            alert('Không thể kết nối đến trang Facebook. Hãy thử F5 lại tab Facebook và bấm Quét lại nhé!');
+          }
           return;
         }
 
@@ -50,15 +88,23 @@ document.addEventListener('DOMContentLoaded', async () => {
           currentScannedData = response.data;
           renderResult(response.data);
         } else {
-          alert('Không trích xuất được dữ liệu: ' + (response?.error || 'Lỗi không xác định'));
+          if (showAlerts) {
+            alert('Không trích xuất được dữ liệu: ' + (response?.error || 'Hãy mở danh sách người xem trước'));
+          }
         }
       });
     } catch (err) {
-      btnScan.innerText = '🔍 Quét Dữ Liệu Story Đang Mở';
-      btnScan.disabled = false;
-      alert('Lỗi: ' + err.message);
+      resetButtons();
+      if (showAlerts) alert('Lỗi: ' + err.message);
     }
-  });
+
+    function resetButtons() {
+      btnScan.disabled = false;
+      btnScrollScan.disabled = false;
+      btnScan.innerHTML = '<span>⚡ Quét Nhanh</span>';
+      btnScrollScan.innerHTML = '<span>📜 Cuộn & Quét Hết</span>';
+    }
+  }
 
   // Sự kiện bấm lưu vào SQLite server
   btnSave.addEventListener('click', async () => {
@@ -68,13 +114,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnSave.disabled = true;
 
     try {
+      const isArchived = currentScannedData.isArchived || currentScannedData.storyUrl.includes('/archive/');
       const payload = {
         story: {
           story_url: currentScannedData.storyUrl,
-          title: `Story của ${currentScannedData.authorName} (${currentScannedData.privacy})`,
+          title: `Story của ${currentScannedData.authorName} (${isArchived ? 'Kho lưu trữ >24h' : 'Tin mới <24h'})`,
           author_name: currentScannedData.authorName,
           author_id: 'fb_story_owner',
           privacy: currentScannedData.privacy,
+          status: isArchived ? 'archived' : 'active',
           total_views: currentScannedData.totalViews || currentScannedData.viewers.length,
           total_reactions: currentScannedData.viewers.filter(v => v.interaction_type !== 'view').length
         },
@@ -110,7 +158,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderResult(data) {
     resultCard.style.display = 'block';
     document.getElementById('author-name').innerText = data.authorName;
-    document.getElementById('privacy-tag').innerText = `Quyền riêng tư: ${data.privacy}`;
+    document.getElementById('privacy-tag').innerText = data.privacy;
+    
+    const statusTag = document.getElementById('story-status-tag');
+    if (data.isArchived || data.storyUrl.includes('/archive/')) {
+      statusTag.innerText = '📂 Kho lưu trữ (>24h)';
+      statusTag.className = 'badge badge-archive';
+    } else {
+      statusTag.innerText = `⏱️ ${data.storyAge || '<24h'}`;
+      statusTag.className = '';
+    }
+
     document.getElementById('viewers-count').innerText = `${data.viewers.length} người xem`;
 
     const viewersListEl = document.getElementById('viewers-list');
@@ -118,16 +176,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (data.viewers.length === 0) {
       viewersListEl.innerHTML = `
-        <div style="padding: 10px; color: #f59e0b; text-align: center; font-size: 11px;">
-          ⚠️ Chưa tìm thấy người xem nào trong DOM.<br>
-          <strong>Hãy nhấn vào biểu tượng danh sách người xem ở góc dưới Story trước, sau đó bấm Quét lại!</strong>
+        <div style="padding: 12px; color: #fbbf24; text-align: center; font-size: 11px; line-height: 1.5;">
+          ⚠️ Chưa tìm thấy người xem nào trong màn hình.<br>
+          <strong>Hãy nhấn vào biểu tượng danh sách người xem ở góc dưới Story trước, sau đó bấm Quét lại nhé!</strong>
         </div>
       `;
       btnSave.style.display = 'none';
       return;
     }
 
-    btnSave.style.display = 'flex';
+    btnSave.style.display = 'block';
     data.viewers.forEach(viewer => {
       const item = document.createElement('div');
       item.className = 'viewer-item';
@@ -142,7 +200,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           <img src="${viewer.avatar_url}" class="avatar" alt="">
           <div>
             <div class="viewer-name">${viewer.user_name}</div>
-            <a href="${viewer.user_profile_url}" target="_blank" class="link-fb">Link Profile</a>
+            <div class="viewer-activity">
+              <span>${viewer.comment_text || 'Đã xem'}</span> &bull;
+              <a href="${viewer.user_profile_url}" target="_blank" class="link-fb">Link FB</a>
+            </div>
           </div>
         </div>
         <span class="viewer-reaction">${reactionEmoji}</span>
