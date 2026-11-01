@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Facebook Story Insights Collector</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      width: 380px;
+      background: #090d16;
+      color: #f1f5f9;
+      padding: 16px;
+      font-size: 13px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #2563eb, #06b6d4);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: white;
+      font-size: 16px;
+    }
+    .brand-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: #f8fafc;
+    }
+    .brand-sub {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .status-box {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .btn {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #2563eb, #3b82f6);
+      color: white;
+      box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+    }
+    .btn-primary:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+    .btn-success {
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: white;
+      margin-top: 10px;
+    }
+    .btn-success:hover {
+      opacity: 0.95;
+    }
+    .result-card {
+      margin-top: 14px;
+      background: #0f172a;
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 12px;
+      padding: 12px;
+      display: none;
+    }
+    .result-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .badge {
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+    }
+    .viewers-list {
+      max-height: 180px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+    .viewer-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .viewer-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+    }
+    .avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .viewer-name {
+      font-weight: 600;
+      font-size: 12px;
+      color: #f1f5f9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 140px;
+    }
+    .viewer-reaction {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: rgba(244, 63, 94, 0.15);
+      color: #fb7185;
+      font-weight: 600;
+    }
+    .link-fb {
+      color: #38bdf8;
+      text-decoration: none;
+      font-size: 11px;
+    }
+    .tip-box {
+      margin-top: 12px;
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.5;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px dashed rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+    .toast {
+      padding: 8px 12px;
+      background: #10b981;
+      color: white;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: 10px;
+      text-align: center;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="brand-icon">F</div>
+    <div>
+      <div class="brand-title">Story Insights Collector</div>
+      <div class="brand-sub">Quét Story & Lưu vào Next.js SQLite</div>
+    </div>
+  </div>
+
+  <div class="status-box">
+    <div>
+      <span class="status-dot"></span>
+      <span id="tab-status">Đang kiểm tra tab Facebook...</span>
+    </div>
+    <span class="badge" id="host-badge">localhost:3000</span>
+  </div>
+
+  <button class="btn btn-primary" id="btn-scan">
+    <span>🔍 Quét Dữ Liệu Story Đang Mở</span>
+  </button>
+
+  <div class="tip-box">
+    💡 <strong>Mẹo:</strong> Hãy mở Story của bạn trên Facebook và nhấn vào mục <strong>"Người xem" (ở góc dưới bên trái Story)</strong> để Facebook mở danh sách người xem trước khi bấm Quét!
+  </div>
+
+  <div class="result-card" id="result-card">
+    <div class="result-head">
+      <div>
+        <div style="font-weight: 700; color: white;" id="author-name">Trần Văn An</div>
+        <div style="font-size: 11px; color: #94a3b8;" id="privacy-tag">Công khai (Public)</div>
+      </div>
+      <span class="badge" id="viewers-count">0 người xem</span>
+    </div>
+
+    <div class="viewers-list" id="viewers-list">
+      <!-- Dynamic Viewers -->
+    </div>
+
+    <button class="btn btn-success" id="btn-save">
+      <span>💾 Lưu Vào Server SQLite (localhost:3000)</span>
+    </button>
+  </div>
+
+  <div class="toast" id="toast-msg">
+    ✅ Đã đồng bộ thành công vào SQLite!
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

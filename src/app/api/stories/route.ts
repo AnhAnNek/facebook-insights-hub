@@ -1,21 +1,34 @@
 import { NextResponse } from 'next/server';
 import { getAllStories, getStats, insertStoryWithInteractions } from '@/lib/db';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { headers: corsHeaders });
+}
+
 export async function GET() {
   try {
     const stories = getAllStories();
     const stats = getStats();
-    return NextResponse.json({
-      success: true,
-      data: {
-        stories,
-        stats
-      }
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          stories,
+          stats
+        }
+      },
+      { headers: corsHeaders }
+    );
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'Lỗi khi tải dữ liệu stories' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
@@ -28,33 +41,37 @@ export async function POST(request: Request) {
     if (!story || !story.story_url) {
       return NextResponse.json(
         { success: false, error: 'Thiếu thông tin story_url' },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
     const storyId = insertStoryWithInteractions(
       {
         story_url: story.story_url,
-        title: story.title || 'Facebook Story được cào / tiếp nhận',
-        author_name: story.author_name || 'Facebook User / Page',
-        author_id: story.author_id || 'unknown_author',
+        title: story.title || `Story Facebook (${new Date().toLocaleDateString('vi-VN')})`,
+        author_name: story.author_name || 'Trần Văn An',
+        author_id: story.author_id || 'owner_story',
         page_url: story.page_url,
         media_url: story.media_url,
-        total_views: story.total_views,
-        total_reactions: story.total_reactions
+        privacy: story.privacy || 'Công khai (Public)',
+        total_views: story.total_views || (interactions ? interactions.length : 0),
+        total_reactions: story.total_reactions || (interactions ? interactions.filter((i: any) => i.interaction_type !== 'view').length : 0)
       },
       interactions || []
     );
 
-    return NextResponse.json({
-      success: true,
-      message: 'Đã lưu Story và tương tác vào SQLite',
-      storyId
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        message: 'Đã lưu Story và tương tác vào SQLite từ Extension',
+        storyId
+      },
+      { headers: corsHeaders }
+    );
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'Lỗi khi lưu story' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }

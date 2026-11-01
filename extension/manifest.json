@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Facebook Story Insights Collector",
+  "version": "1.0.0",
+  "description": "Tiện ích quét danh sách người xem, thả tym và link profile của Story Facebook gửi về máy chủ Next.js SQLite.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Facebook Story Insights Collector"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.facebook.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
