@@ -10,20 +10,19 @@ import {
   Search, 
   RefreshCw, 
   Download, 
-  Play, 
   CheckCircle2, 
   User, 
   Layers, 
   Code2, 
-  BookOpen, 
-  Sparkles,
-  Trash2,
-  ThumbsUp,
-  Smile,
-  Terminal,
-  Activity,
-  Globe,
-  X
+  Sparkles, 
+  Trash2, 
+  Terminal, 
+  Activity, 
+  Puzzle, 
+  Radio, 
+  ArrowUpRight, 
+  X,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface Story {
@@ -74,25 +73,13 @@ export default function HomePage() {
   const [stories, setStories] = useState<Story[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<'stories' | 'scanner' | 'database' | 'guide'>('stories');
+  const [activeTab, setActiveTab] = useState<'stories' | 'extension' | 'database'>('stories');
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
   const [detailLoading, setDetailLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [toast, setToast] = useState<string | null>(null);
-
-  // Scanner state
-  const [targetName, setTargetName] = useState<string>('Trần Văn An');
-  const [privacy, setPrivacy] = useState<string>('Công khai (Public)');
-  const [scanUrl, setScanUrl] = useState<string>(
-    'https://www.facebook.com/stories/120880389116714/UzpfSVNDOjIwNjc5NzMzOTcxNjY0MTU=/?bucket_count=9&source=story_tray'
-  );
-  const [isScanning, setIsScanning] = useState<boolean>(false);
-  const [scanLogs, setScanLogs] = useState<string[]>([]);
-  const [scanResult, setScanResult] = useState<any>(null);
-
-  // Database inspector state
-  const [dbTab, setDbTab] = useState<'interactions' | 'stories'>('interactions');
-  const [allInteractions, setAllInteractions] = useState<Interaction[]>([]);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('Vừa mới kết nối');
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
 
   // Show toast notification
   const showToast = (msg: string) => {
@@ -100,25 +87,37 @@ export default function HomePage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Fetch stories & stats
-  const loadData = async () => {
+  // Fetch stories & stats from SQLite
+  const loadData = async (silent: boolean = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await fetch('/api/stories');
       const data = await res.json();
       if (data.success) {
         setStories(data.data.stories || []);
         setStats(data.data.stats || null);
+        setLastSyncTime(new Date().toLocaleTimeString('vi-VN'));
       }
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu:', err);
-      showToast('Lỗi khi kết nối tới Next.js API');
+      if (!silent) showToast('Không thể kết nối tới server SQLite');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
-  // Fetch story details
+  // Auto polling to receive data automatically when Extension sends it!
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(() => {
+      if (autoRefresh) {
+        loadData(true);
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
+
+  // Fetch story details with interactions
   const viewStoryDetail = async (storyId: string) => {
     try {
       setDetailLoading(true);
@@ -151,82 +150,20 @@ export default function HomePage() {
     }
   };
 
-  // Trigger Scanner / Crawler Ingest
-  const handleStartScan = async () => {
-    if (!scanUrl.trim()) {
-      showToast('Vui lòng nhập đường link Facebook Story');
-      return;
-    }
-
-    setIsScanning(true);
-    setScanLogs(['[INIT] Đang gửi yêu cầu tới Next.js Scanner Engine...']);
-    setScanResult(null);
-
-    try {
-      const res = await fetch('/api/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          url: scanUrl,
-          targetName: targetName.trim() || 'Trần Văn An',
-          privacy: privacy || 'Công khai (Public)'
-        })
-      });
-
-      const json = await res.json();
-      if (json.success) {
-        setScanLogs(json.data.logs || []);
-        setScanResult(json.data);
-        showToast('Đã quét và lưu thành công vào SQLite!');
-        loadData();
-      } else {
-        setScanLogs(prev => [...prev, `[ERROR] ${json.error}`]);
-        showToast('Quá trình quét thất bại: ' + json.error);
-      }
-    } catch (err: any) {
-      setScanLogs(prev => [...prev, `[FATAL] Không thể kết nối tới server: ${err.message}`]);
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
-  // Reseed DB
+  // Reseed / Reset DB
   const handleReseed = async () => {
-    if (!confirm('Khởi tạo lại dữ liệu mẫu cho SQLite?')) return;
+    if (!confirm('Làm mới lại dữ liệu SQLite?')) return;
     try {
       const res = await fetch('/api/db/seed', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        showToast('Đã khởi tạo lại SQLite Database!');
+        showToast('Đã làm mới dữ liệu SQLite!');
         loadData();
       }
     } catch (err) {
       showToast('Lỗi khi reseed database');
     }
   };
-
-  // Load raw interactions for DB tab
-  const loadInteractions = async () => {
-    try {
-      const res = await fetch('/api/export?format=json');
-      const data = await res.json();
-      if (data.interactions) {
-        setAllInteractions(data.interactions);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === 'database') {
-      loadInteractions();
-    }
-  }, [activeTab]);
 
   // Filter stories
   const filteredStories = stories.filter(s => 
@@ -249,55 +186,65 @@ export default function HomePage() {
 
         {/* Header */}
         <header className="sticky top-4 z-40 mb-8 backdrop-blur-xl bg-slate-900/85 border border-white/10 rounded-2xl shadow-xl shadow-black/40 px-6 py-4">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3.5">
               <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-400 flex items-center justify-center shadow-lg shadow-blue-500/25">
-                <Activity size={22} className="text-white" />
+                <Puzzle size={22} className="text-white" />
               </div>
               <div>
                 <div className="text-lg font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
                   Facebook Insights Hub
                 </div>
-                <div className="text-xs text-slate-400 font-medium">
-                  Next.js App Router &bull; Pure Tailwind CSS &bull; SQLite Engine
+                <div className="text-xs text-slate-400 font-medium flex items-center gap-2">
+                  <span>Receiver cho Chrome Extension</span>
+                  <span>&bull;</span>
+                  <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Cổng tiếp nhận: POST /api/stories
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5">
-              <div className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>SQLite Connected: facebook_insights.db</span>
-              </div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <button 
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                  autoRefresh 
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                    : 'bg-white/5 border-white/10 text-slate-400'
+                }`}
+                onClick={() => setAutoRefresh(!autoRefresh)}
+                title="Tự động lắng nghe và nạp dữ liệu ngay khi Extension gửi về"
+              >
+                <Radio size={13} className={autoRefresh ? 'animate-pulse text-emerald-400' : ''} />
+                <span>Auto-Sync: {autoRefresh ? 'Bật (Mỗi 4s)' : 'Tắt'}</span>
+              </button>
 
               <button 
-                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl font-medium text-xs bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
-                onClick={handleReseed}
-                title="Khởi tạo lại dữ liệu mẫu"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
+                onClick={() => loadData()}
+                title="Làm mới thủ công"
               >
-                <RefreshCw size={14} />
-                <span>Reset DB</span>
+                <RefreshCw size={13} />
+                <span>Làm Mới</span>
               </button>
 
               <a 
                 href="/api/export?format=csv" 
-                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl font-medium text-xs bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
                 download
-                title="Tải toàn bộ danh sách người xem về máy tính dưới dạng file CSV"
+                title="Tải toàn bộ người xem về dạng file CSV/Excel"
               >
-                <Download size={14} />
+                <Download size={13} />
                 <span>Xuất CSV</span>
               </a>
 
               <button 
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl font-semibold text-xs bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all cursor-pointer"
-                onClick={() => {
-                  setActiveTab('scanner');
-                  window.scrollTo({ top: 350, behavior: 'smooth' });
-                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all cursor-pointer"
+                onClick={() => setActiveTab('extension')}
               >
-                <Play size={14} />
-                <span>Quét Story</span>
+                <Puzzle size={14} />
+                <span>Hướng Dẫn Extension</span>
               </button>
             </div>
           </div>
@@ -306,18 +253,17 @@ export default function HomePage() {
         {/* Hero Section */}
         <section className="mb-8">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/25 text-blue-400 text-xs font-semibold mb-3">
-            <Sparkles size={13} />
-            <span>Fullstack Next.js &bull; Tailwind CSS v4 &bull; SQLite Engine</span>
+            <Radio size={13} className="text-emerald-400 animate-pulse" />
+            <span>Chế độ: Đang chờ & Nhận dữ liệu từ Chrome Extension</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mb-3">
-            Thu Thập & Phân Tích Dữ Liệu{' '}
+            Trung Tâm Phân Tích Dữ Liệu{' '}
             <span className="bg-gradient-to-r from-blue-400 via-sky-400 to-rose-400 bg-clip-text text-transparent">
               Facebook Story
             </span>
           </h1>
           <p className="text-sm sm:text-base text-slate-400 max-w-3xl leading-relaxed">
-            Hệ thống máy chủ Next.js thuần Tailwind CSS kết hợp cơ sở dữ liệu SQLite cục bộ. 
-            Thu thập người xem, profile Facebook cá nhân, thả tym (Love), lượt xem và bình luận với giao diện trực quan.
+            Hệ thống web này đóng vai trò <strong>Máy chủ Lưu trữ (SQLite) & Bảng Điều Khiển</strong> chỉ tiếp nhận dữ liệu thực tế được quét và đồng bộ từ tiện ích <strong>Chrome Extension</strong> khi bạn mở xem Story trên Facebook.
           </p>
         </section>
 
@@ -326,7 +272,7 @@ export default function HomePage() {
           {/* Card 1 */}
           <div className="p-5 rounded-2xl bg-slate-900/70 backdrop-blur-xl border border-white/10 shadow-lg relative overflow-hidden group hover:border-blue-500/30 transition-all">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tổng Story Theo Dõi</span>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Story Đã Thu Thập</span>
               <div className="w-8 h-8 rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center">
                 <Layers size={16} />
               </div>
@@ -336,7 +282,7 @@ export default function HomePage() {
             </div>
             <div className="flex items-center gap-1.5 text-xs text-slate-400">
               <CheckCircle2 size={13} className="text-emerald-400" />
-              <span>Bảng `stories` SQLite</span>
+              <span>Lưu vĩnh viễn trong SQLite</span>
             </div>
           </div>
 
@@ -352,7 +298,7 @@ export default function HomePage() {
               {stats ? stats.totalViews.toLocaleString('vi-VN') : '...'}
             </div>
             <div className="text-xs text-slate-400">
-              ~{stats && stats.totalStories > 0 ? Math.round(stats.totalViews / stats.totalStories) : 0} lượt/story
+              Cập nhật lúc: {lastSyncTime}
             </div>
           </div>
 
@@ -384,7 +330,7 @@ export default function HomePage() {
               {stats ? stats.totalUniqueProfiles : '...'}
             </div>
             <div className="text-xs text-slate-400">
-              Tên, Link profile & Avatar
+              Có Tên & Link Facebook cá nhân
             </div>
           </div>
         </div>
@@ -400,19 +346,19 @@ export default function HomePage() {
             onClick={() => setActiveTab('stories')}
           >
             <Layers size={16} />
-            <span>Danh Sách Story & Người Xem ({stories.length})</span>
+            <span>Danh Sách Story Từ Extension ({stories.length})</span>
           </button>
 
           <button 
             className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'scanner' 
+              activeTab === 'extension' 
                 ? 'bg-blue-500/15 border border-blue-500/40 text-blue-400 shadow-md shadow-blue-500/20' 
                 : 'text-slate-400 hover:text-slate-100 hover:bg-white/5 border border-transparent'
             }`}
-            onClick={() => setActiveTab('scanner')}
+            onClick={() => setActiveTab('extension')}
           >
-            <Play size={16} />
-            <span>Trình Quét Dữ Liệu (Scanner Engine)</span>
+            <Puzzle size={16} />
+            <span>Cài Đặt Extension & Kết Nối</span>
           </button>
 
           <button 
@@ -424,36 +370,29 @@ export default function HomePage() {
             onClick={() => setActiveTab('database')}
           >
             <Database size={16} />
-            <span>Bảng Dữ Liệu SQLite</span>
-          </button>
-
-          <button 
-            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'guide' 
-                ? 'bg-blue-500/15 border border-blue-500/40 text-blue-400 shadow-md shadow-blue-500/20' 
-                : 'text-slate-400 hover:text-slate-100 hover:bg-white/5 border border-transparent'
-            }`}
-            onClick={() => setActiveTab('guide')}
-          >
-            <BookOpen size={16} />
-            <span>Hướng Dẫn & Vận Hành</span>
+            <span>Bảng Dữ Liệu SQLite (Explorer)</span>
           </button>
         </div>
 
-        {/* TAB 1: STORIES & VIEWERS */}
+        {/* TAB 1: STORIES & VIEWERS RECEIVED FROM EXTENSION */}
         {activeTab === 'stories' && (
           <section className="mb-12">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <span>Các Facebook Stories Đã Thu Thập</span>
-              </h2>
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <span>Dữ Liệu Story Nhận Từ Chrome Extension</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Mỗi khi bạn bấm "Lưu Vào Server SQLite" trên tiện ích Chrome, dữ liệu sẽ ngay lập tức xuất hiện ở đây.
+                </p>
+              </div>
 
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 <div className="relative flex-1 sm:w-72">
                   <Search size={15} className="absolute left-3.5 top-3.5 text-slate-500" />
                   <input 
                     type="text" 
-                    placeholder="Tìm theo URL, tiêu đề, tác giả..." 
+                    placeholder="Tìm theo tác giả, URL, tiêu đề..." 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full bg-slate-900/80 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-sky-400 transition-all"
@@ -462,8 +401,8 @@ export default function HomePage() {
 
                 <button 
                   className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
-                  onClick={loadData}
-                  title="Tải lại"
+                  onClick={() => loadData()}
+                  title="Làm mới"
                 >
                   <RefreshCw size={15} />
                 </button>
@@ -473,16 +412,22 @@ export default function HomePage() {
             {loading ? (
               <div className="p-12 text-center text-slate-400 bg-slate-900/60 rounded-2xl border border-white/10">
                 <RefreshCw size={28} className="animate-spin mx-auto mb-3 text-sky-400" />
-                <div className="text-sm">Đang tải danh sách Story từ SQLite...</div>
+                <div className="text-sm">Đang đọc dữ liệu từ SQLite...</div>
               </div>
             ) : filteredStories.length === 0 ? (
               <div className="p-12 text-center bg-slate-900/60 rounded-2xl border border-white/10">
-                <p className="text-slate-400 text-sm mb-4">Chưa có story nào phù hợp với tìm kiếm.</p>
+                <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto mb-4">
+                  <Puzzle size={24} />
+                </div>
+                <h3 className="text-base font-bold text-white mb-1">Chưa có Story nào được gửi về</h3>
+                <p className="text-slate-400 text-xs sm:text-sm max-w-md mx-auto mb-5">
+                  Hãy mở Facebook trên Chrome, xem Story của bạn, mở danh sách người xem và bấm nút <strong>Quét Dữ Liệu</strong> trên Extension để đồng bộ về đây!
+                </p>
                 <button 
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500 transition-all cursor-pointer"
-                  onClick={() => setActiveTab('scanner')}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all cursor-pointer"
+                  onClick={() => setActiveTab('extension')}
                 >
-                  <Play size={14} /> Quét Story Mới
+                  <Puzzle size={14} /> Xem Hướng Dẫn Cài Extension
                 </button>
               </div>
             ) : (
@@ -495,19 +440,22 @@ export default function HomePage() {
                     <div>
                       <div className="flex items-center gap-3 mb-4">
                         <img 
-                          src={`https://api.dicebear.com/7.x/identicon/svg?seed=${story.author_id}`}
+                          src={`https://api.dicebear.com/7.x/identicon/svg?seed=${story.author_name || story.author_id}`}
                           alt={story.author_name}
                           className="w-11 h-11 rounded-full object-cover border-2 border-blue-500"
                         />
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="font-bold text-sm text-white">{story.author_name}</h4>
                             <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 font-semibold">
                               {story.privacy || 'Công khai (Public)'}
                             </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                              🔌 Chrome Extension
+                            </span>
                           </div>
-                          <div className="text-xs text-slate-400 mt-0.5">
-                            ID: {story.author_id} &bull; {new Date(story.created_at).toLocaleDateString('vi-VN')} {new Date(story.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          <div className="text-xs text-slate-400 mt-1">
+                            Lưu lúc: {new Date(story.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} &bull; {new Date(story.created_at).toLocaleDateString('vi-VN')}
                           </div>
                         </div>
                       </div>
@@ -538,7 +486,7 @@ export default function HomePage() {
                         </span>
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-500/10 border border-rose-500/20 rounded-full text-xs font-semibold text-rose-400">
                           <Heart size={12} fill="#ff2e63" />
-                          <span>{story.total_reactions} thả tym</span>
+                          <span>{story.total_reactions} thả cảm xúc / tym</span>
                         </span>
                         {story.total_replies > 0 && (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-xs font-semibold text-amber-400">
@@ -551,11 +499,11 @@ export default function HomePage() {
 
                     <div className="flex items-center justify-between pt-4 border-t border-white/10 mt-2">
                       <button 
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 text-slate-200 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 text-slate-200 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
                         onClick={() => viewStoryDetail(story.id)}
                       >
                         <User size={13} />
-                        <span>Xem Người Xem & Thả Tym</span>
+                        <span>Xem Chi Tiết Người Xem & Link FB</span>
                       </button>
 
                       <button 
@@ -573,238 +521,95 @@ export default function HomePage() {
           </section>
         )}
 
-        {/* TAB 2: SCANNER ENGINE */}
-        {activeTab === 'scanner' && (
+        {/* TAB 2: EXTENSION SETUP & RECEIVER STATUS */}
+        {activeTab === 'extension' && (
           <section className="p-6 sm:p-8 rounded-2xl bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-xl mb-12">
             <div className="flex items-center gap-3.5 mb-6">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-sky-400 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-                <Play size={18} />
+                <Puzzle size={20} />
               </div>
               <div>
-                <h2 className="text-lg sm:text-xl font-bold text-white">Trình Quét & Thu Thập Dữ Liệu Facebook Story</h2>
+                <h2 className="text-lg sm:text-xl font-bold text-white">Kết Nối Chrome Extension với Server Next.js</h2>
                 <p className="text-xs sm:text-sm text-slate-400">
-                  Cài đặt tên mục tiêu cần quét, chế độ quyền riêng tư và đường link Facebook Story.
+                  Dữ liệu người xem Story thật sẽ được cào từ Extension và lưu thẳng vào SQLite.
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            {/* Connection Status Box */}
+            <div className="p-5 rounded-xl bg-black/40 border border-emerald-500/30 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2">Tên người cần quét (Target Name / Chủ Story):</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 font-semibold"
-                  value={targetName}
-                  onChange={(e) => setTargetName(e.target.value)}
-                  placeholder="Ví dụ: Trần Văn An"
-                />
-                <div className="text-[11px] text-slate-500 mt-1">
-                  Định danh chủ tài khoản Story cần trích xuất
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                  <span className="text-sm font-bold text-white">Cổng tiếp nhận API (Receiver Endpoint) sẵn sàng:</span>
                 </div>
+                <code className="text-xs text-sky-400 font-mono bg-sky-950/60 px-3 py-1 rounded-md border border-sky-500/30">
+                  POST http://localhost:3000/api/stories
+                </code>
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2">Quyền riêng tư (Privacy):</label>
-                <select 
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-sky-400 cursor-pointer"
-                  value={privacy}
-                  onChange={(e) => setPrivacy(e.target.value)}
-                >
-                  <option value="Công khai (Public)">🌐 Công khai (Public)</option>
-                  <option value="Bạn bè (Friends)">👥 Bạn bè (Friends)</option>
-                  <option value="Chỉ mình tôi (Only me)">🔒 Chỉ mình tôi (Only me)</option>
-                </select>
-                <div className="text-[11px] text-slate-500 mt-1">
-                  Chế độ hiển thị của Story trên Facebook
-                </div>
+              <div className="text-right">
+                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                  CORS Enabled &bull; Hỗ trợ Extension Chrome
+                </span>
               </div>
             </div>
 
-            <div className="mb-6">
-              <label className="block text-xs font-semibold text-slate-300 mb-2">Đường dẫn Facebook Story (URL cần cào):</label>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <input 
-                  type="text" 
-                  className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-mono text-white focus:outline-none focus:border-sky-400"
-                  value={scanUrl}
-                  onChange={(e) => setScanUrl(e.target.value)}
-                  placeholder="https://www.facebook.com/stories/..."
-                />
-                <button 
-                  className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
-                  onClick={handleStartScan}
-                  disabled={isScanning}
-                >
-                  {isScanning ? (
-                    <>
-                      <RefreshCw size={15} className="animate-spin" />
-                      <span>Đang Cào Dữ Liệu...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play size={15} />
-                      <span>Quét Story Ngay</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              <div className="text-[11px] text-slate-500 mt-1.5 font-mono">
-                URL mẫu: <code>https://www.facebook.com/stories/120880389116714/UzpfSVNDOjIwNjc5NzMzOTcxNjY0MTU=/?bucket_count=9&source=story_tray</code>
-              </div>
-            </div>
-
-            {/* Terminal Logs */}
-            <div className="mt-6">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
-                  <Terminal size={14} className="text-sky-400" />
-                  <span>Nhật ký tiến trình thời gian thực (Real-time Scanner Log):</span>
-                </div>
-                {scanLogs.length > 0 && (
-                  <button 
-                    className="text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded bg-white/5 border border-white/10 transition-colors"
-                    onClick={() => setScanLogs([])}
-                  >
-                    Xóa Log
-                  </button>
-                )}
-              </div>
-
-              <div className="bg-[#05070d] border border-white/10 rounded-xl p-4 font-mono text-xs text-sky-400 min-h-36 max-h-60 overflow-y-auto">
-                {scanLogs.length === 0 ? (
-                  <div className="text-slate-600 italic">
-                    Nhấn "Quét Story Ngay" để kích hoạt tiến trình cào dữ liệu cho {targetName}...
-                  </div>
-                ) : (
-                  scanLogs.map((log, idx) => (
-                    <div 
-                      key={idx} 
-                      className={`mb-1 ${
-                        log.includes('[ERROR]') || log.includes('[FATAL]') ? 'text-rose-400' :
-                        log.includes('[SUCCESS]') || log.includes('[DONE]') ? 'text-emerald-400' :
-                        log.includes('[SQLITE]') ? 'text-amber-400' : 'text-sky-300'
-                      }`}
-                    >
-                      {log}
+            {/* 3 Step Setup Guide */}
+            <div className="space-y-4 mb-6">
+              <div className="p-5 rounded-xl bg-black/30 border border-white/10">
+                <div className="flex items-start gap-3.5">
+                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-sm text-white mb-1">Tải tiện ích Extension vào Chrome (10 giây)</h4>
+                    <p className="text-xs text-slate-400 mb-2">
+                      Mở tab mới trong Chrome gõ: <code className="text-sky-400 font-mono">chrome://extensions</code>, bật <strong>"Chế độ dành cho nhà phát triển"</strong> (Developer mode ở góc trên bên phải), bấm <strong>"Tải tiện ích đã giải nén"</strong> (Load unpacked) và chọn thư mục:
+                    </p>
+                    <div className="p-3 rounded-lg bg-black font-mono text-xs text-sky-400 border border-white/5 select-all">
+                      d:\work-spaces\facebook-insights-hub\extension
                     </div>
-                  ))
-                )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 rounded-xl bg-black/30 border border-white/10">
+                <div className="flex items-start gap-3.5">
+                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                  <div>
+                    <h4 className="font-bold text-sm text-white mb-1">Mở Story của bạn trên Facebook</h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Đăng nhập tài khoản Facebook trên trình duyệt và mở <strong>Story của chính bạn</strong>. Nhấn vào nút <strong>"Người xem"</strong> (ở góc dưới bên trái khung Story) để Facebook bung danh sách người xem lên màn hình.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 rounded-xl bg-black/30 border border-white/10">
+                <div className="flex items-start gap-3.5">
+                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                  <div>
+                    <h4 className="font-bold text-sm text-white mb-1">Bấm Quét & Lưu vào SQLite</h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Bấm vào biểu tượng Extension trên thanh công cụ &rarr; Bấm <strong>"Quét Dữ Liệu Story Đang Mở"</strong> &rarr; Bấm <strong>"Lưu Vào Server SQLite"</strong>. Dữ liệu sẽ tự động nhảy vào giao diện Web này trong vòng 4 giây!
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* STRUCTURED RESULT VIEW (THEO ĐÚNG YÊU CẦU CỦA USER) */}
-            {scanResult && (
-              <div className="mt-6 p-6 rounded-2xl bg-slate-900/90 border border-sky-400/30 shadow-2xl">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-white/10">
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 size={20} className="text-emerald-400" />
-                    <h3 className="text-base sm:text-lg font-bold text-white">
-                      Kết Quả Quét Story của: <span className="text-sky-400">{scanResult.author_name}</span>
-                    </h3>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400">
-                      Quyền riêng tư: {scanResult.privacy}
-                    </span>
-                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                      {scanResult.total_views} Lượt xem
-                    </span>
-                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400">
-                      {scanResult.total_reactions} Thả cảm xúc
-                    </span>
-                  </div>
-                </div>
-
-                {/* Table of Viewers with direct Facebook links */}
-                <h4 className="text-xs sm:text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
-                  <User size={15} className="text-sky-400" />
-                  <span>Danh sách người xem & Link Facebook cá nhân ({scanResult.viewers?.length || 0} người):</span>
-                </h4>
-
-                <div className="overflow-x-auto rounded-xl border border-white/10 bg-black/40">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="bg-white/5 text-slate-400 border-b border-white/10">
-                        <th className="p-3">Tên người xem</th>
-                        <th className="p-3">Hành động / Cảm xúc</th>
-                        <th className="p-3">Link Facebook Cá Nhân</th>
-                        <th className="p-3">Bình luận đi kèm</th>
-                        <th className="p-3">Thời gian xem</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {scanResult.viewers && scanResult.viewers.map((viewer: any, idx: number) => (
-                        <tr key={idx} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="p-3">
-                            <div className="flex items-center gap-2.5">
-                              <img 
-                                src={viewer.avatarUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${viewer.name}`} 
-                                alt="" 
-                                className="w-7 h-7 rounded-full object-cover"
-                              />
-                              <span className="font-semibold text-slate-100">{viewer.name}</span>
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
-                              viewer.interactionType === 'love' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
-                              viewer.interactionType === 'like' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                              viewer.interactionType === 'haha' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                              'bg-slate-500/10 text-slate-400 border border-slate-500/20'
-                            }`}>
-                              {viewer.interactionType === 'love' ? '❤️ Thả tym' : 
-                               viewer.interactionType === 'like' ? '👍 Thích' : 
-                               viewer.interactionType === 'haha' ? '😆 Haha' : 
-                               viewer.interactionType === 'view' ? '👁️ Xem' : viewer.interactionType}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <a 
-                              href={viewer.profileUrl} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="inline-flex items-center gap-1.5 font-mono text-[11px] text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-1 rounded-md hover:bg-sky-500/20 transition-colors"
-                            >
-                              <span>{viewer.profileUrl}</span>
-                              <ExternalLink size={11} />
-                            </a>
-                          </td>
-                          <td className="p-3 text-slate-300">
-                            {viewer.comment ? (
-                              <span className="text-slate-200">{viewer.comment}</span>
-                            ) : (
-                              <span className="text-slate-600 italic">-</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-slate-400 whitespace-nowrap text-[11px]">
-                            {new Date(viewer.viewedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} &bull; {new Date(viewer.viewedAt).toLocaleDateString('vi-VN')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="mt-4 flex gap-3">
-                  <button 
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500 transition-all cursor-pointer"
-                    onClick={() => {
-                      setActiveTab('stories');
-                      viewStoryDetail(scanResult.storyId);
-                    }}
-                  >
-                    <Eye size={13} /> Mở Trong Quản Lý Stories
-                  </button>
-                  <a 
-                    href="/api/export?format=csv"
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 text-slate-200 hover:bg-white/10 transition-all cursor-pointer"
-                  >
-                    <Download size={13} /> Xuất File CSV
-                  </a>
-                </div>
-              </div>
-            )}
+            <div className="flex gap-3">
+              <button 
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 text-slate-200 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
+                onClick={handleReseed}
+              >
+                <RefreshCw size={14} /> Khởi Tạo Lại SQLite Mẫu
+              </button>
+              <a 
+                href="/api/export?format=csv"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 text-slate-200 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
+              >
+                <FileSpreadsheet size={14} /> Xuất Dữ Liệu Ra File Excel (CSV)
+              </a>
+            </div>
           </section>
         )}
 
@@ -819,197 +624,69 @@ export default function HomePage() {
                 <div>
                   <h2 className="text-lg sm:text-xl font-bold text-white">SQLite Database Explorer</h2>
                   <div className="text-xs text-slate-400">
-                    Tệp dữ liệu: <code className="text-sky-400">data/facebook_insights.db</code> (node:sqlite)
+                    Tệp dữ liệu cục bộ: <code className="text-sky-400 font-mono">data/facebook_insights.db</code>
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <button 
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    dbTab === 'interactions' 
-                      ? 'bg-blue-600 text-white shadow-md' 
-                      : 'bg-white/5 text-slate-300 hover:bg-white/10'
-                  }`}
-                  onClick={() => setDbTab('interactions')}
+                <a 
+                  href="/api/export?format=csv" 
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 transition-all cursor-pointer"
+                  download
                 >
-                  Bảng `interactions` (Người xem & Tym)
-                </button>
-                <button 
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    dbTab === 'stories' 
-                      ? 'bg-blue-600 text-white shadow-md' 
-                      : 'bg-white/5 text-slate-300 hover:bg-white/10'
-                  }`}
-                  onClick={() => setDbTab('stories')}
-                >
-                  Bảng `stories` ({stories.length})
-                </button>
+                  <Download size={13} /> Tải CSV
+                </a>
                 <a 
                   href="/api/export?format=json" 
                   target="_blank"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 transition-all cursor-pointer"
                 >
-                  <Code2 size={13} /> JSON
+                  <Code2 size={13} /> Xem JSON
                 </a>
               </div>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-white/10 bg-black/40">
-              {dbTab === 'interactions' ? (
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="bg-white/5 text-slate-400 border-b border-white/10">
-                      <th className="p-3">#</th>
-                      <th className="p-3">Tài khoản người xem</th>
-                      <th className="p-3">Hành động</th>
-                      <th className="p-3">Link Facebook Cá Nhân</th>
-                      <th className="p-3">Bình luận</th>
-                      <th className="p-3">Thời gian ghi nhận</th>
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-white/5 text-slate-400 border-b border-white/10">
+                    <th className="p-3">ID Story</th>
+                    <th className="p-3">Tác giả Story</th>
+                    <th className="p-3">Quyền riêng tư</th>
+                    <th className="p-3">Lượt xem</th>
+                    <th className="p-3">Thả cảm xúc</th>
+                    <th className="p-3">Đường dẫn Story</th>
+                    <th className="p-3">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {stories.map((s) => (
+                    <tr key={s.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="p-3 font-mono text-sky-400">{s.id}</td>
+                      <td className="p-3 font-semibold text-slate-100">{s.author_name}</td>
+                      <td className="p-3">
+                        <span className="px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 text-[11px]">
+                          {s.privacy || 'Công khai'}
+                        </span>
+                      </td>
+                      <td className="p-3 text-slate-200">{s.total_views}</td>
+                      <td className="p-3 text-rose-400 font-semibold">{s.total_reactions}</td>
+                      <td className="p-3 max-w-xs truncate text-slate-400 font-mono text-[11px]">
+                        {s.story_url}
+                      </td>
+                      <td className="p-3">
+                        <button 
+                          className="text-xs text-sky-400 hover:underline cursor-pointer"
+                          onClick={() => viewStoryDetail(s.id)}
+                        >
+                          Xem Người Xem
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {allInteractions.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="p-8 text-center text-slate-500">
-                          Đang tải dữ liệu từ bảng SQLite...
-                        </td>
-                      </tr>
-                    ) : (
-                      allInteractions.map((item, index) => (
-                        <tr key={index} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="p-3 text-slate-500">{item.id || index + 1}</td>
-                          <td className="p-3">
-                            <div className="flex items-center gap-2">
-                              <img 
-                                src={item.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${item.user_name}`} 
-                                alt="" 
-                                className="w-7 h-7 rounded-full object-cover"
-                              />
-                              <span className="font-semibold text-slate-100">{item.user_name}</span>
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
-                              item.interaction_type === 'love' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
-                              item.interaction_type === 'like' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                              'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                            }`}>
-                              {item.interaction_type.toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <a 
-                              href={item.user_profile_url} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="text-sky-400 hover:text-sky-300 font-mono text-[11px] inline-flex items-center gap-1"
-                            >
-                              <span>{item.user_profile_url}</span>
-                              <ExternalLink size={11} />
-                            </a>
-                          </td>
-                          <td className="p-3 text-slate-300">
-                            {item.comment_text || <span className="text-slate-600 italic">(Chỉ xem / thả tym)</span>}
-                          </td>
-                          <td className="p-3 text-slate-400 text-[11px]">
-                            {new Date(item.created_at).toLocaleString('vi-VN')}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              ) : (
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="bg-white/5 text-slate-400 border-b border-white/10">
-                      <th className="p-3">ID Story</th>
-                      <th className="p-3">Tác giả</th>
-                      <th className="p-3">Quyền riêng tư</th>
-                      <th className="p-3">Lượt xem</th>
-                      <th className="p-3">Thả cảm xúc</th>
-                      <th className="p-3">Story URL</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {stories.map((s) => (
-                      <tr key={s.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="p-3 font-mono text-sky-400">{s.id}</td>
-                        <td className="p-3 font-semibold text-slate-100">{s.author_name}</td>
-                        <td className="p-3">
-                          <span className="px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 text-[11px]">
-                            {s.privacy || 'Công khai'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-slate-200">{s.total_views}</td>
-                        <td className="p-3 text-rose-400 font-semibold">{s.total_reactions}</td>
-                        <td className="p-3 max-w-xs truncate text-slate-400 font-mono text-[11px]">
-                          {s.story_url}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* TAB 4: GUIDE */}
-        {activeTab === 'guide' && (
-          <section className="p-6 sm:p-8 rounded-2xl bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-xl mb-12">
-            <div className="flex items-center gap-3.5 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center text-white">
-                <BookOpen size={18} />
-              </div>
-              <div>
-                <h2 className="text-lg sm:text-xl font-bold text-white">Hướng Dẫn Vận Hành & Chạy Source Code Fullstack</h2>
-                <p className="text-xs sm:text-sm text-slate-400">
-                  Mã nguồn sử dụng Next.js App Router + Pure Tailwind CSS v4 + SQLite Engine.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="p-5 rounded-xl bg-black/40 border border-white/10">
-                <div className="flex items-start gap-3.5">
-                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
-                  <div>
-                    <h4 className="font-bold text-sm text-white mb-1">Khởi chạy dự án</h4>
-                    <p className="text-xs text-slate-400 mb-2">Chạy lệnh sau tại thư mục gốc của dự án:</p>
-                    <pre className="p-3 rounded-lg bg-black text-sky-400 font-mono text-xs">npm run dev</pre>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-5 rounded-xl bg-black/40 border border-white/10">
-                <div className="flex items-start gap-3.5">
-                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
-                  <div>
-                    <h4 className="font-bold text-sm text-white mb-1">Cơ sở dữ liệu SQLite cục bộ (Zero Config)</h4>
-                    <p className="text-xs text-slate-400 mb-2">
-                      Dữ liệu lưu trữ vĩnh viễn trong tệp cục bộ mà không cần cài đặt thêm MySQL hay Docker:
-                    </p>
-                    <pre className="p-3 rounded-lg bg-black text-emerald-400 font-mono text-xs">data/facebook_insights.db</pre>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-5 rounded-xl bg-black/40 border border-white/10">
-                <div className="flex items-start gap-3.5">
-                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
-                  <div>
-                    <h4 className="font-bold text-sm text-white mb-1">Các API Endpoint sẵn sàng</h4>
-                    <ul className="text-xs text-slate-300 space-y-1.5 list-disc pl-5">
-                      <li><code>POST /api/scan</code>: Tiếp nhận và quét Story theo tên người cần quét.</li>
-                      <li><code>GET /api/stories</code>: Lấy danh sách toàn bộ Stories và số liệu.</li>
-                      <li><code>GET /api/export?format=csv</code>: Tải danh sách người xem về máy dưới dạng Excel/CSV.</li>
-                      <li><code>POST /api/db/seed</code>: Khởi tạo lại dữ liệu mẫu vào SQLite.</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </section>
         )}
@@ -1022,7 +699,7 @@ export default function HomePage() {
                 <div className="flex items-center gap-2.5">
                   <Heart size={18} className="text-rose-500" fill="#ff2e63" />
                   <h3 className="text-base sm:text-lg font-bold text-white">
-                    Chi Tiết Người Xem: {selectedStory.title}
+                    Chi Tiết Người Xem Story: {selectedStory.title}
                   </h3>
                 </div>
                 <button 
@@ -1033,7 +710,7 @@ export default function HomePage() {
                 </button>
               </div>
 
-              {/* Story Summary */}
+              {/* Story Summary Card */}
               <div className="p-4 rounded-xl bg-black/40 border border-white/5 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex-1">
                   <div className="text-[11px] text-slate-400">Đường dẫn Story gốc:</div>
@@ -1080,7 +757,7 @@ export default function HomePage() {
                         <th className="p-3">Hành động</th>
                         <th className="p-3">Link Facebook</th>
                         <th className="p-3">Bình luận</th>
-                        <th className="p-3">Thời gian</th>
+                        <th className="p-3">Thời gian xem</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -1116,7 +793,7 @@ export default function HomePage() {
                               rel="noreferrer" 
                               className="text-sky-400 hover:text-sky-300 font-mono text-[11px] inline-flex items-center gap-1"
                             >
-                              <span>Xem Profile</span>
+                              <span>{viewer.user_profile_url}</span>
                               <ExternalLink size={11} />
                             </a>
                           </td>
