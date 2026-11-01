@@ -1,4 +1,5 @@
 let currentScannedData = null;
+let currentTargetTab = null;
 const SERVER_API = 'http://localhost:3000/api/stories';
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -9,60 +10,83 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnSave = document.getElementById('btn-save');
   const resultCard = document.getElementById('result-card');
   const toastMsg = document.getElementById('toast-msg');
+  const errorCard = document.getElementById('error-card');
+  const errorTitle = document.getElementById('error-title');
+  const errorDesc = document.getElementById('error-desc');
+  const btnReloadTab = document.getElementById('btn-reload-tab');
+  const btnRetryScan = document.getElementById('btn-retry-scan');
+  const tipBox = document.getElementById('tip-box');
 
-  // Kiểm tra tab hiện tại
-  let isStoryTab = false;
-  let isArchiveTab = false;
-
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab && tab.url && tab.url.includes('facebook.com')) {
-      if (tab.url.includes('/archive/stories/')) {
-        isStoryTab = true;
-        isArchiveTab = true;
-        tabStatusEl.innerText = 'Kho Lưu Trữ Tin (>24h) 📂';
-        tabStatusEl.style.color = '#fbbf24';
-        statusDot.style.background = '#f59e0b';
-      } else if (tab.url.includes('/stories/')) {
-        isStoryTab = true;
-        tabStatusEl.innerText = 'Đang mở Story (<24h) 🟢';
-        tabStatusEl.style.color = '#34d399';
-        statusDot.style.background = '#10b981';
-      } else {
-        tabStatusEl.innerText = 'Đang ở Facebook (Hãy mở Story)';
-        tabStatusEl.style.color = '#94a3b8';
-        statusDot.style.background = '#94a3b8';
-      }
-    } else {
-      tabStatusEl.innerText = 'Chưa mở trang Facebook';
-      tabStatusEl.style.color = '#f87171';
-      statusDot.style.background = '#ef4444';
+  function showError(title, desc, allowReload = true) {
+    if (errorCard) {
+      errorCard.style.display = 'block';
+      errorTitle.innerText = title;
+      errorDesc.innerText = desc;
+      btnReloadTab.style.display = allowReload ? 'block' : 'none';
+      if (tipBox) tipBox.style.display = 'none';
     }
-  } catch (e) {
-    console.error(e);
   }
 
-  // Tự động quét nhanh ngay khi mở Extension nếu đang ở trang Story
-  if (isStoryTab) {
-    triggerScan('SCAN_CURRENT_STORY', false);
+  function hideError() {
+    if (errorCard) errorCard.style.display = 'none';
+    if (tipBox) tipBox.style.display = 'block';
   }
 
-  // Nút Quét Nhanh (quét DOM hiện tại)
-  btnScan.addEventListener('click', () => {
-    triggerScan('SCAN_CURRENT_STORY', true);
-  });
+  // Tìm tab Facebook đang mở
+  async function findFacebookTab() {
+    try {
+      // 1. Kiểm tra tab đang chọn trong cửa sổ hiện tại
+      const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (currentTab && currentTab.url && currentTab.url.includes('facebook.com')) {
+        return currentTab;
+      }
 
-  // Nút Cuộn & Quét Hết (tự động cuộn danh sách người xem có thanh cuộn)
-  btnScrollScan.addEventListener('click', () => {
-    triggerScan('SCROLL_AND_SCAN', true);
-  });
+      // 2. Dự phòng: Tìm tab Facebook bất kỳ đang mở
+      const fbTabs = await chrome.tabs.query({ url: ['*://*.facebook.com/*', '*://facebook.com/*'] });
+      if (fbTabs && fbTabs.length > 0) {
+        // Ưu tiên tab đang ở trang stories
+        const storyTab = fbTabs.find(t => t.url && (t.url.includes('/stories/') || t.url.includes('/archive/')));
+        return storyTab || fbTabs[0];
+      }
+      return currentTab || null;
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  }
 
-  // Hàm tự động kiểm tra và nạp content.js nếu tab Facebook chưa có
+  // Khởi tạo trạng thái tab
+  currentTargetTab = await findFacebookTab();
+  let isStoryTab = false;
+
+  if (currentTargetTab && currentTargetTab.url && currentTargetTab.url.includes('facebook.com')) {
+    if (currentTargetTab.url.includes('/archive/stories/')) {
+      isStoryTab = true;
+      tabStatusEl.innerText = 'Kho Lưu Trữ Tin (>24h) 📂';
+      tabStatusEl.style.color = '#fbbf24';
+      statusDot.style.background = '#f59e0b';
+    } else if (currentTargetTab.url.includes('/stories/')) {
+      isStoryTab = true;
+      tabStatusEl.innerText = 'Đang mở Story (<24h) 🟢';
+      tabStatusEl.style.color = '#34d399';
+      statusDot.style.background = '#10b981';
+    } else {
+      tabStatusEl.innerText = 'Đang ở Facebook (Hãy mở Story)';
+      tabStatusEl.style.color = '#94a3b8';
+      statusDot.style.background = '#94a3b8';
+    }
+  } else {
+    tabStatusEl.innerText = 'Chưa mở tab Facebook';
+    tabStatusEl.style.color = '#f87171';
+    statusDot.style.background = '#ef4444';
+  }
+
+  // Tự động kiểm tra và bơm content script nếu tab chưa có
   async function ensureContentScriptInjected(tabId) {
     return new Promise((resolve) => {
       chrome.tabs.sendMessage(tabId, { action: 'PING' }, async (response) => {
         if (chrome.runtime.lastError || !response?.success) {
-          console.log('[Popup] Content script chưa nạp, tự động inject content.js...');
+          console.log('[Popup] Đang tự động nạp content.js vào tab Facebook...');
           try {
             await chrome.scripting.executeScript({
               target: { tabId: tabId },
@@ -70,7 +94,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             setTimeout(() => resolve(true), 250);
           } catch (err) {
-            console.error('[Popup] Lỗi tự động nạp script:', err);
+            console.error('[Popup] Lỗi nạp script:', err);
             resolve(false);
           }
         } else {
@@ -80,55 +104,64 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  async function triggerScan(actionType, showAlerts = true) {
+  // Thực hiện quét Story
+  async function triggerScan(actionType) {
+    hideError();
     const isScrollAction = actionType === 'SCROLL_AND_SCAN';
     const activeBtn = isScrollAction ? btnScrollScan : btnScan;
 
-    activeBtn.innerHTML = isScrollAction ? '⏳ Đang cuộn danh sách...' : '⏳ Đang quét...';
+    activeBtn.innerHTML = isScrollAction ? '⏳ Đang cuộn...' : '⏳ Đang quét...';
     btnScan.disabled = true;
     btnScrollScan.disabled = true;
 
-    try {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!activeTab || !activeTab.id) {
-        if (showAlerts) alert('Không tìm thấy tab Facebook đang mở!');
-        resetButtons();
-        return;
-      }
-
-      // Tự động kiểm tra và bơm content.js vào tab nếu chưa có mã
-      const isReady = await ensureContentScriptInjected(activeTab.id);
-      if (!isReady) {
-        resetButtons();
-        if (showAlerts) {
-          alert('Không thể kết nối đến trang Facebook. Hãy thử F5 lại tab Facebook và bấm Quét lại nhé!');
-        }
-        return;
-      }
-
-      chrome.tabs.sendMessage(activeTab.id, { action: actionType }, (response) => {
-        resetButtons();
-
-        if (chrome.runtime.lastError) {
-          if (showAlerts) {
-            alert('Không thể kết nối đến trang Facebook. Hãy thử F5 lại tab Facebook và bấm Quét lại nhé!');
-          }
-          return;
-        }
-
-        if (response && response.success) {
-          currentScannedData = response.data;
-          renderResult(response.data);
-        } else {
-          if (showAlerts) {
-            alert('Không trích xuất được dữ liệu: ' + (response?.error || 'Hãy mở danh sách người xem trước'));
-          }
-        }
-      });
-    } catch (err) {
+    currentTargetTab = await findFacebookTab();
+    if (!currentTargetTab || !currentTargetTab.id || !currentTargetTab.url?.includes('facebook.com')) {
       resetButtons();
-      if (showAlerts) alert('Lỗi: ' + err.message);
+      showError(
+        'Không tìm thấy tab Facebook',
+        'Vui lòng mở trang Facebook chứa Story cần quét trên trình duyệt trước khi bấm Quét.',
+        false
+      );
+      return;
     }
+
+    // Tự động nạp mã nếu cần
+    const isReady = await ensureContentScriptInjected(currentTargetTab.id);
+    if (!isReady) {
+      resetButtons();
+      showError(
+        'Chưa kết nối được tab Facebook',
+        'Tab Facebook chưa thể nhận lệnh từ Extension (thường do Extension vừa được tải lại). Bấm nút bên dưới để tự động tải lại tab!',
+        true
+      );
+      return;
+    }
+
+    // Gửi lệnh quét sang tab Facebook
+    chrome.tabs.sendMessage(currentTargetTab.id, { action: actionType }, (response) => {
+      resetButtons();
+
+      if (chrome.runtime.lastError) {
+        showError(
+          'Mất kết nối với tab Facebook',
+          'Trang Facebook không phản hồi lệnh quét. Bấm nút Tải Lại Tab bên dưới để thử lại tự động nhé!',
+          true
+        );
+        return;
+      }
+
+      if (response && response.success) {
+        hideError();
+        currentScannedData = response.data;
+        renderResult(response.data);
+      } else {
+        showError(
+          'Chưa đọc được dữ liệu',
+          response?.error || 'Hãy đảm bảo bạn đã bấm vào mục "Người xem" ở góc dưới Story trước khi bấm Quét.',
+          false
+        );
+      }
+    });
 
     function resetButtons() {
       btnScan.disabled = false;
@@ -138,7 +171,47 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Sự kiện bấm lưu vào SQLite server
+  // Tự động quét nhanh khi vừa mở Extension nếu tab đang ở Story
+  if (isStoryTab) {
+    triggerScan('SCAN_CURRENT_STORY');
+  }
+
+  // Bấm Quét Nhanh
+  btnScan.addEventListener('click', () => {
+    triggerScan('SCAN_CURRENT_STORY');
+  });
+
+  // Bấm Cuộn & Quét Hết
+  btnScrollScan.addEventListener('click', () => {
+    triggerScan('SCROLL_AND_SCAN');
+  });
+
+  // Bấm Tải Lại Tab Facebook từ thông báo lỗi
+  btnReloadTab.addEventListener('click', async () => {
+    if (!currentTargetTab || !currentTargetTab.id) {
+      currentTargetTab = await findFacebookTab();
+    }
+    if (currentTargetTab && currentTargetTab.id) {
+      errorTitle.innerText = '⏳ Đang tải lại tab Facebook...';
+      errorDesc.innerText = 'Vui lòng chờ khoảng 2-3 giây, Extension sẽ tự động nạp mã và quét ngay!';
+      btnReloadTab.disabled = true;
+
+      chrome.tabs.reload(currentTargetTab.id, {}, () => {
+        setTimeout(async () => {
+          btnReloadTab.disabled = false;
+          hideError();
+          triggerScan('SCAN_CURRENT_STORY');
+        }, 2800);
+      });
+    }
+  });
+
+  // Bấm Thử Lại
+  btnRetryScan.addEventListener('click', () => {
+    triggerScan('SCAN_CURRENT_STORY');
+  });
+
+  // Lưu vào SQLite Server
   btnSave.addEventListener('click', async () => {
     if (!currentScannedData) return;
 
@@ -146,7 +219,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnSave.disabled = true;
 
     try {
-      const isArchived = currentScannedData.isArchived || currentScannedData.storyUrl.includes('/archive/');
+      const isArchived = currentScannedData.isArchived || currentScannedData.storyUrl?.includes('/archive/');
       const payload = {
         story: {
           story_url: currentScannedData.storyUrl,
@@ -176,12 +249,16 @@ document.addEventListener('DOMContentLoaded', async () => {
           toastMsg.style.display = 'none';
         }, 4000);
       } else {
-        alert('Lỗi server: ' + json.error);
+        showError('Lỗi Server', json.error || 'Server Next.js từ chối lưu.', false);
         btnSave.innerText = '💾 Lưu Vào Server SQLite (localhost:3000)';
         btnSave.disabled = false;
       }
     } catch (err) {
-      alert('Không thể kết nối tới server Next.js (http://localhost:3000): ' + err.message + '\nHãy đảm bảo server Next.js đang chạy bằng npm run dev!');
+      showError(
+        'Không thể kết nối Server Next.js',
+        'Hãy đảm bảo server đang chạy bằng npm run dev tại cổng 3000 (' + err.message + ')',
+        false
+      );
       btnSave.innerText = '💾 Lưu Vào Server SQLite (localhost:3000)';
       btnSave.disabled = false;
     }
@@ -191,14 +268,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     resultCard.style.display = 'block';
     document.getElementById('author-name').innerText = data.authorName;
     document.getElementById('privacy-tag').innerText = data.privacy;
-    
+
     const statusTag = document.getElementById('story-status-tag');
-    if (data.isArchived || data.storyUrl.includes('/archive/')) {
+    if (data.isArchived || data.storyUrl?.includes('/archive/')) {
       statusTag.innerText = '📂 Kho lưu trữ (>24h)';
       statusTag.className = 'badge badge-archive';
     } else {
       statusTag.innerText = `⏱️ ${data.storyAge || '<24h'}`;
-      statusTag.className = '';
+      statusTag.className = 'badge';
     }
 
     document.getElementById('viewers-count').innerText = `${data.viewers.length} người xem`;
@@ -210,7 +287,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       viewersListEl.innerHTML = `
         <div style="padding: 12px; color: #fbbf24; text-align: center; font-size: 11px; line-height: 1.5;">
           ⚠️ Chưa tìm thấy người xem nào trong màn hình.<br>
-          <strong>Hãy nhấn vào biểu tượng danh sách người xem ở góc dưới Story trước, sau đó bấm Quét lại nhé!</strong>
+          <strong>Hãy nhấn vào mục "Người xem" ở góc dưới Story trước để mở bảng danh sách, sau đó bấm Quét lại nhé!</strong>
         </div>
       `;
       btnSave.style.display = 'none';

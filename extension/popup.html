@@ -142,6 +142,13 @@
       cursor: not-allowed;
       transform: none;
     }
+    .error-card {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
     .tip-box {
       font-size: 11px;
       color: #94a3b8;
@@ -276,7 +283,25 @@
     </a>
   </div>
 
-  <div class="tip-box">
+  <!-- Thông báo lỗi trực quan (Thay thế hoàn toàn alert popup gây đơ trình duyệt) -->
+  <div class="error-card" id="error-card" style="display: none;">
+    <div style="font-weight: 700; color: #f87171; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+      <span>⚠️</span> <span id="error-title">Chưa kết nối được tab Facebook</span>
+    </div>
+    <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 10px; line-height: 1.4;" id="error-desc">
+      Tab Facebook chưa nạp mã Extension. Hãy bấm nút tải lại bên dưới để Extension tự nạp mã và quét!
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button class="btn btn-primary" id="btn-reload-tab" style="padding: 7px 12px; font-size: 11px;">
+        🔄 Tải Lại Tab Facebook & Quét
+      </button>
+      <button class="btn btn-secondary" id="btn-retry-scan" style="padding: 7px 12px; font-size: 11px;">
+        ⚡ Thử Lại
+      </button>
+    </div>
+  </div>
+
+  <div class="tip-box" id="tip-box">
     💡 <strong>Mẹo:</strong> Mở Story của bạn trên Facebook &rarr; Nhấn vào mục <strong>"Người xem" (ở góc dưới bên trái Story)</strong> để danh sách người xem bung lên như trong hình, sau đó bấm <strong>Quét</strong>!
   </div>
 
