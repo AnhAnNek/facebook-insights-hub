@@ -171,6 +171,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // Lắng nghe tiến trình tự động cuộn từ content.js để cập nhật số lượng người xem theo thời gian thực
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === 'SCAN_PROGRESS') {
+      if (btnScrollScan.disabled) {
+        btnScrollScan.innerHTML = `<span>⏳ Đang cuộn... (${message.count} người)</span>`;
+      }
+      if (btnScan.disabled) {
+        btnScan.innerHTML = `<span>⏳ Đang quét... (${message.count} người)</span>`;
+      }
+    }
+  });
+
   // Tự động quét nhanh khi vừa mở Extension nếu tab đang ở Story
   if (isStoryTab) {
     triggerScan('SCAN_CURRENT_STORY');
